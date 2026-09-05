@@ -41,7 +41,7 @@ def repository():
     client.close()
 
 @pytest.fixture
-def api_client():
+def api_client(fake_event_queue):
     client = MongoClient(settings.mongodb_uri)
     database = client["sentry_workflow_api_test"]
 
@@ -56,13 +56,11 @@ def api_client():
 
     workflow_service = WorkflowService(repository=repository)
     event_service = EventService(repository=event_repository)
-
     event_queue = FakeEventQueue()
-
-    app.dependency_overrides[get_event_queue] = lambda: event_queue
 
     app.dependency_overrides[get_workflow_service] = lambda: workflow_service
     app.dependency_overrides[get_event_service] = lambda: event_service
+    app.dependency_overrides[get_event_queue] = lambda: fake_event_queue
 
     with TestClient(app) as test_client:
         yield test_client

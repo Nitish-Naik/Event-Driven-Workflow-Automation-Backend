@@ -43,7 +43,7 @@ def test_duplicate_sentry_event_is_accepted(
 
     assert second_response.json()["status"] == "duplicate"
 
-def test_receive_sentry_event_queues_event(api_client):
+def test_receive_sentry_event_queues_event(api_client, fake_event_queue):
     payload = {
         "event_id": "queued-event-1",
         "event_type": "issue.created",
@@ -54,3 +54,25 @@ def test_receive_sentry_event_queues_event(api_client):
 
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
+
+    assert fake_event_queue.events == ["queued-event-1"]
+
+
+def test_duplicate_sentry_event_is_not_queued(
+    api_client,
+    fake_event_queue,
+):
+    payload = {
+        "event_id": "duplicate-queue-event",
+        "event_type": "issue.created",
+    }
+
+    first_response = api_client.post("/webhooks/sentry", json=payload)
+    second_response = api_client.post("/webhooks/sentry", json=payload)
+
+    assert first_response.status_code == 202
+    assert second_response.status_code == 202
+
+    assert fake_event_queue.events == [
+        "duplicate-queue-event"
+    ]
