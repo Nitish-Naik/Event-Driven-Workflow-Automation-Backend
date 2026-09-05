@@ -65,3 +65,29 @@ class WorkflowRepository:
             ],
             name="workflow_status_version",
         )
+
+        self.collection.create_index(
+            [("workflow_id", 1)],
+            unique=True,
+            partialFilterExpression={"status": "active"},
+            name="workflow_active_unique",
+        )
+
+
+    def update_status(
+        self, 
+        workflow_id: str,
+        version: int,
+        status: str
+    ) -> bool:
+        result = self.collection.update_one(
+            {
+                "workflow_id": workflow_id,
+                "version": version,
+            },
+            {
+                "$set": {"status": status},
+            },
+        )
+
+        return result.modified_count == 1
