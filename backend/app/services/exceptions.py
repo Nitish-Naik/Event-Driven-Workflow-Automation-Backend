@@ -6,3 +6,6 @@ class WorkflowNotFoundError(Exception):
 
 class ArchivedWorkflowError(Exception):
     """Raised when an archived workflow cannot be activated."""
+
+class EventAlreadyExistsError(Exception):
+    """Raised when an event has already been received."""

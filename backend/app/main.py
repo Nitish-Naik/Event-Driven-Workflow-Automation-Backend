@@ -8,6 +8,7 @@ from app.db.redis import get_redis
 from app.db.repositories.workflow import WorkflowRepository
 
 from app.routers.workflows import router as workflow_router
+from app.routers.webhooks import router as webhook_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,6 +20,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(workflow_router)
+app.include_router(webhook_router)
 
 
 @app.get("/health")
