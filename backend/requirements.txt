@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+pymongo
+redis
+httpx
+pytest
+pytest-asyncio
