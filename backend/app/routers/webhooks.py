@@ -4,6 +4,8 @@ from app.integrations.sentry import normalize_sentry_event
 from app.services.event import EventService
 from app.services.exceptions import EventAlreadyExistsError
 
+from app.queue.event_queue import EventQueue
+
 router = APIRouter(
     prefix="/webhooks",
     tags=["webhooks"],
@@ -13,6 +15,8 @@ router = APIRouter(
 def get_event_service():
     return EventService()
 
+def get_event_queue():
+    return EventQueue()
 
 @router.post(
     "/sentry",
@@ -21,6 +25,7 @@ def get_event_service():
 def receive_sentry_event(
     payload: dict,
     service: EventService = Depends(get_event_service),
+    queue: EventQueue = Depends(get_event_queue),
 ):
     event = normalize_sentry_event(payload)
 
@@ -34,7 +39,10 @@ def receive_sentry_event(
             "event_id": event.event_id,
         }
 
+    queue.enqueue(event.event_id)
+
     return {
         "status": "accepted",
         "event_id": event_id,
     }
+

@@ -15,6 +15,16 @@ from app.routers.webhooks import get_event_service
 from app.services.workflow import WorkflowService
 from app.services.event import EventService
 
+from app.routers.webhooks import get_event_queue
+
+
+class FakeEventQueue:
+    def __init__(self):
+        self.events = []
+
+    def enqueue(self, event_id: str):
+        self.events.append(event_id)
+
 @pytest.fixture
 def repository():
     client = MongoClient(settings.mongodb_uri)
@@ -47,6 +57,10 @@ def api_client():
     workflow_service = WorkflowService(repository=repository)
     event_service = EventService(repository=event_repository)
 
+    event_queue = FakeEventQueue()
+
+    app.dependency_overrides[get_event_queue] = lambda: event_queue
+
     app.dependency_overrides[get_workflow_service] = lambda: workflow_service
     app.dependency_overrides[get_event_service] = lambda: event_service
 
@@ -58,3 +72,15 @@ def api_client():
     database.drop_collection("workflows")
     database.drop_collection("events")
     client.close()
+
+
+@pytest.fixture
+def fake_event_queue():
+    class FakeEventQueue:
+        def __init__(self):
+            self.events = []
+
+        def enqueue(self, event_id: str):
+            self.events.append(event_id)
+
+    return FakeEventQueue()
