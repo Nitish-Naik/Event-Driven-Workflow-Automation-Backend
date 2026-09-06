@@ -221,7 +221,6 @@ def test_process_next_returns_false_when_event_is_missing():
     assert worker.process_next() is False
     assert run_repository.runs == []
 
-
 def test_process_next_creates_and_starts_run_with_active_workflow():
     event_id = "event-456"
     workflow = make_workflow(
@@ -232,12 +231,14 @@ def test_process_next_creates_and_starts_run_with_active_workflow():
     redis = FakeRedis([json.dumps({"event_id": event_id})])
     event_repository = FakeEventRepository({event_id: make_event(event_id)})
     run_repository = FakeRunRepository()
+    executor = FakeWorkflowExecutor()
 
     worker = EventWorker(
         redis_client=redis,
         event_repository=event_repository,
         run_repository=run_repository,
         workflow_service=FakeWorkflowService(workflow),
+        workflow_executor=executor,
     )
 
     assert worker.process_next() is True
@@ -252,6 +253,7 @@ def test_process_next_creates_and_starts_run_with_active_workflow():
     assert run.status == RunStatus.QUEUED
     assert run_repository.status_updates == [
         (run.run_id, RunStatus.PROCESSING),
+        (run.run_id, RunStatus.COMPLETED),
     ]
 
 
