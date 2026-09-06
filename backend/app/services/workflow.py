@@ -2,7 +2,12 @@ from pymongo.errors import DuplicateKeyError
 
 from app.db.repositories.workflow import WorkflowRepository
 from app.schemas.workflow import Workflow
-from app.services.exceptions import WorkflowAlreadyExistsError, WorkflowNotFoundError, ArchivedWorkflowError
+from app.services.exceptions import (
+    ArchivedWorkflowError,
+    WorkflowAlreadyExistsError,
+    WorkflowNotFoundError,
+)
+
 
 class WorkflowService:
     def __init__(self, repository=None):
@@ -20,10 +25,9 @@ class WorkflowService:
                 f"Workflow version already exists: "
                 f"{workflow.workflow_id} v{workflow.version}"
             ) from exc
-        
 
     def get_workflow(
-        self, 
+        self,
         workflow_id: str,
         version: int,
     ) -> Workflow | None:
@@ -33,10 +37,16 @@ class WorkflowService:
         )
 
     def get_active_workflow(
-        self, 
-        workflow_id: str
+        self,
+        workflow_id: str,
     ) -> Workflow | None:
         return self.repository.get_active(workflow_id)
+
+    def get_active_workflow_by_trigger(
+        self,
+        trigger: str,
+    ) -> Workflow | None:
+        return self.repository.get_active_by_trigger(trigger)
 
     def activate_workflow(
         self,
