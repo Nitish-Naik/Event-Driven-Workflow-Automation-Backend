@@ -2,18 +2,14 @@ import pytest
 
 from app.execution.executor import WorkflowNodeExecutor
 from app.execution.types import WorkflowExecutionError
-from app.execution.inputs import InputResolutionError
+from app.schemas.workflow import WorkflowEdge, WorkflowNode
+
+from test_node_executor import make_context, make_workflow
 
 
-# These tests intentionally use the existing test helpers and schemas through
-# the executor's public contract.
-
-
-def test_executor_wraps_unexpected_handler_exception(make_workflow, make_context):
+def test_executor_wraps_unexpected_handler_exception():
     workflow = make_workflow(
-        [
-            {"id": "source", "type": "source"},
-        ],
+        [WorkflowNode(id="source", type="source")],
         [],
     )
     context = make_context(workflow)
@@ -25,20 +21,20 @@ def test_executor_wraps_unexpected_handler_exception(make_workflow, make_context
 
     with pytest.raises(
         WorkflowExecutionError,
-        match="Node 'source' \(source\) failed during execution",
-    ):
+        match=r"Node 'source' \(source\) failed during execution",
+    ) as exc_info:
         executor.execute(context)
 
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "database connection failed"
 
-def test_executor_preserves_workflow_execution_error(make_workflow, make_context):
+
+def test_executor_preserves_workflow_execution_error():
     workflow = make_workflow(
-        [
-            {"id": "source", "type": "source"},
-        ],
+        [WorkflowNode(id="source", type="source")],
         [],
     )
     context = make_context(workflow)
-
     expected = WorkflowExecutionError("known execution failure")
 
     def failing_handler(ctx, config, inputs):
@@ -52,21 +48,21 @@ def test_executor_preserves_workflow_execution_error(make_workflow, make_context
     assert exc_info.value is expected
 
 
-def test_executor_wraps_input_resolution_error(make_workflow, make_context):
+def test_executor_wraps_input_resolution_error():
     workflow = make_workflow(
         [
-            {"id": "source", "type": "source"},
-            {
-                "id": "consumer",
-                "type": "consumer",
-                "config": {
+            WorkflowNode(id="source", type="source"),
+            WorkflowNode(
+                id="consumer",
+                type="consumer",
+                config={
                     "inputs": {
                         "message": {"$ref": "source.missing"},
                     }
                 },
-            },
+            ),
         ],
-        [{"source": "source", "target": "consumer"}],
+        [WorkflowEdge(source="source", target="consumer")],
     )
     context = make_context(workflow)
 
@@ -83,15 +79,10 @@ def test_executor_wraps_input_resolution_error(make_workflow, make_context):
         }
     )
 
-    # The source executes first, so this test verifies that input resolution
-    # failures are converted into workflow-level execution failures.
-    workflow.nodes[0].config = {}
-    workflow.nodes[1].config["inputs"]["message"] = {
-        "$ref": "source.missing"
-    }
-
     with pytest.raises(
         WorkflowExecutionError,
         match="Failed to resolve inputs for node 'consumer'",
-    ):
+    ) as exc_info:
         executor.execute(context)
+
+    assert exc_info.value.__cause__ is not None
