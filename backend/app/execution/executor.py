@@ -2,7 +2,7 @@ from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
 from app.execution.graph import WorkflowGraph
-from app.execution.inputs import resolve_input_value
+from app.execution.inputs import InputResolutionError, resolve_input_value
 from app.execution.registry import NodeRegistry
 from app.execution.types import NodeHandler, WorkflowExecutionError
 
@@ -39,17 +39,29 @@ class WorkflowNodeExecutor:
                 configured_inputs = node.config.get("inputs", {})
 
                 if isinstance(configured_inputs, dict):
-                    node_inputs = {
-                        name: resolve_input_value(context, value)
-                        for name, value in configured_inputs.items()
-                    }
+                    try:
+                        node_inputs = {
+                            name: resolve_input_value(context, value)
+                            for name, value in configured_inputs.items()
+                        }
+                    except InputResolutionError as exc:
+                        raise WorkflowExecutionError(
+                            f"Failed to resolve inputs for node '{node.id}': {exc}"
+                        ) from exc
 
-            result = self.registry.execute(
-                node.type,
-                context,
-                node.config,
-                node_inputs,
-            )
+            try:
+                result = self.registry.execute(
+                    node.type,
+                    context,
+                    node.config,
+                    node_inputs,
+                )
+            except WorkflowExecutionError:
+                raise
+            except Exception as exc:
+                raise WorkflowExecutionError(
+                    f"Node '{node.id}' ({node.type}) failed during execution"
+                ) from exc
 
             if result is None:
                 result = {}
