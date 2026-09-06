@@ -18,6 +18,7 @@ class EventWorker:
         event_repository=None,
         run_repository=None,
         workflow_service=None,
+        workflow_executor=None,
     ):
         self.redis = redis_client if redis_client is not None else get_redis()
         self.event_repository = (
@@ -35,6 +36,7 @@ class EventWorker:
             if workflow_service is not None
             else WorkflowService()
         )
+        self.workflow_executor = workflow_executor
 
     def process_next(self) -> bool:
         item = self.redis.lpop(self.QUEUE_NAME)
@@ -72,4 +74,14 @@ class EventWorker:
         self.run_repository.create(run)
         self.run_repository.update_status(run.run_id, RunStatus.PROCESSING)
 
+        if self.workflow_executor is None:
+            return True
+
+        try:
+            self.workflow_executor.execute(workflow, event)
+        except Exception:
+            self.run_repository.update_status(run.run_id, RunStatus.FAILED)
+            return True
+
+        self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
         return True
