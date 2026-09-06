@@ -9,7 +9,7 @@ from app.schemas.run import RunStatus, WorkflowRun
 from app.services.workflow import WorkflowService
 from app.queue.retry_queue import RetryQueue
 
-from app.services.retry import ( is_retryable_error, calculate_retry_delay )
+from app.services.retry import (is_retryable_error, calculate_retry_delay)
 
 
 class EventWorker:
@@ -43,7 +43,9 @@ class EventWorker:
         )
         self.workflow_executor = workflow_executor
 
-        self.retry_queue = retry_queue if retry_queue is not None else RetryQueue(self.redis)
+        self.retry_queue = (
+            retry_queue if retry_queue is not None else RetryQueue(self.redis)
+        )
 
     def process_next(self) -> bool:
         item = self.redis.lpop(self.QUEUE_NAME)
@@ -51,8 +53,15 @@ class EventWorker:
         if item is None:
             return False
 
-        message = json.loads(item)
-        event_id = message["event_id"]
+        try:
+            message = json.loads(item)
+        except (TypeError, json.JSONDecodeError):
+            return False
+
+        event_id = message.get("event_id")
+
+        if not event_id:
+            return False
 
         event = self.event_repository.get_by_id(event_id)
 
@@ -104,9 +113,7 @@ class EventWorker:
 
             next_attempt = run.attempt + 1
 
-            delay = calculate_retry_delay(
-                next_attempt,
-            )
+            delay = calculate_retry_delay(next_attempt)
 
             self.run_repository.update_retry_metadata(
                 run_id=run.run_id,
@@ -191,9 +198,7 @@ class EventWorker:
 
             next_attempt = run.attempt + 1
 
-            delay = calculate_retry_delay(
-                next_attempt,
-            )
+            delay = calculate_retry_delay(next_attempt)
 
             self.run_repository.update_retry_metadata(
                 run_id=run.run_id,
@@ -221,5 +226,4 @@ class EventWorker:
         )
 
         return True
-
 
