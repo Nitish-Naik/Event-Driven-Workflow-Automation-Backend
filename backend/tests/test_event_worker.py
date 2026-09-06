@@ -29,10 +29,15 @@ class FakeEventRepository:
 class FakeRunRepository:
     def __init__(self):
         self.runs = []
+        self.status_updates = []
 
     def create(self, run):
         self.runs.append(run)
         return run.run_id
+
+    def update_status(self, run_id, status):
+        self.status_updates.append((run_id, status))
+        return True
 
 
 class FakeWorkflowService:
@@ -105,7 +110,7 @@ def test_process_next_returns_false_when_queue_is_empty():
     assert worker.process_next() is False
 
 
-def test_process_next_creates_run_with_active_workflow():
+def test_process_next_creates_and_starts_run_with_active_workflow():
     event_id = "event-456"
     workflow = make_workflow(
         workflow_id="sentry-triage",
@@ -132,7 +137,10 @@ def test_process_next_creates_run_with_active_workflow():
     assert run.event_id == event_id
     assert run.workflow_id == "sentry-triage"
     assert run.workflow_version == 7
-    assert run.status == RunStatus.PROCESSING
+    assert run.status == RunStatus.QUEUED
+    assert run_repository.status_updates == [
+        (run.run_id, RunStatus.PROCESSING),
+    ]
 
 
 def test_process_next_returns_false_when_no_active_workflow_matches_event():
