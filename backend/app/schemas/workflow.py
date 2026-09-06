@@ -24,6 +24,7 @@ class WorkflowEdge(BaseModel):
 class Workflow(BaseModel):
     workflow_id: str
     name: str
+    trigger: str
     version: int = Field(default=1, ge=1)
     status: WorkflowStatus = WorkflowStatus.DRAFT
 
