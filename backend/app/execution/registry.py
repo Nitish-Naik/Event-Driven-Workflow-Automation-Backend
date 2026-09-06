@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 
 from app.execution.contracts import ExecutionContext
-from app.execution.executor import NodeHandler, WorkflowExecutionError
+from app.execution.types import NodeHandler, WorkflowExecutionError
 
 
 class NodeRegistry:
