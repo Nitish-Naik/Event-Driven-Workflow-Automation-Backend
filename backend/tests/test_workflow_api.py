@@ -2,6 +2,7 @@ def test_create_workflow(api_client):
     payload = {
         "workflow_id": "api-workflow",
         "name": "API Test Workflow",
+        "trigger": "sentry",
         "version": 1,
         "status": "draft",
         "nodes": [],
@@ -40,6 +41,7 @@ def test_get_active_workflow(api_client):
     payload = {
         "workflow_id": "active-workflow",
         "name": "Active Workflow",
+        "trigger": "sentry",
         "version": 1,
         "status": "active",
         "nodes": [],
@@ -79,6 +81,7 @@ def test_activate_workflow(api_client):
     payload = {
         "workflow_id": "activate-workflow",
         "name": "Activation Test",
+        "trigger": "sentry",
         "version": 1,
         "status": "draft",
         "nodes": [],
@@ -118,6 +121,7 @@ def test_activate_new_version_archives_previous_version(api_client):
     v1 = {
         "workflow_id": "versioned-workflow",
         "name": "Versioned Workflow",
+        "trigger": "sentry",
         "version": 1,
         "status": "active",
         "nodes": [],
