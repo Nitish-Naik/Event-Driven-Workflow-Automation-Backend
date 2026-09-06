@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.execution.contracts import ExecutionContext
-from app.execution.executor import NodeHandler
+from app.execution.types import NodeHandler
 
 
 SENTRY_TRIGGER = "sentry_trigger"
