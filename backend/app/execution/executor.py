@@ -3,6 +3,7 @@ from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
 from app.execution.graph import WorkflowGraph
+from app.execution.registry import NodeRegistry
 
 
 NodeHandler = Callable[[ExecutionContext, Any], dict[str, Any]]
@@ -13,8 +14,12 @@ class WorkflowExecutionError(Exception):
 
 
 class WorkflowNodeExecutor:
-    def __init__(self, handlers: dict[str, NodeHandler] | None = None):
-        self.handlers = handlers or {}
+    def __init__(
+        self,
+        handlers: dict[str, NodeHandler] | None = None,
+        registry: NodeRegistry | None = None,
+    ):
+        self.registry = registry or NodeRegistry(handlers)
 
     def execute(self, context: ExecutionContext) -> ExecutionResult:
         graph = WorkflowGraph(context.workflow)
@@ -31,13 +36,7 @@ class WorkflowNodeExecutor:
                     f"Workflow node '{node_id}' does not exist"
                 )
 
-            handler = self.handlers.get(node.type)
-            if handler is None:
-                raise WorkflowExecutionError(
-                    f"No handler registered for node type '{node.type}'"
-                )
-
-            result = handler(context, node.config)
+            result = self.registry.execute(node.type, context, node.config)
             if result is None:
                 result = {}
 
