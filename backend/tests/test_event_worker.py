@@ -9,7 +9,6 @@ from app.services.retry import RetryableExecutionError
 from app.services.retry import PermanentExecutionError
 
 
-
 class FakeRedis:
     def __init__(self, items=None):
         self.items = items or []
@@ -42,12 +41,7 @@ class FakeRunRepository:
         self.status_updates.append((run_id, status))
         return True
 
-    def update_retry_metadata(
-        self,
-        run_id,
-        attempt,
-        last_error,
-    ):
+    def update_retry_metadata(self, run_id, attempt, last_error):
         for run in self.runs:
             if run.run_id == run_id:
                 run.attempt = attempt
@@ -55,13 +49,14 @@ class FakeRunRepository:
                 return True
 
         return True
-    
+
     def get_by_id(self, run_id):
         for run in self.runs:
             if run.run_id == run_id:
                 return run
 
         return None
+
 
 class FakeWorkflowService:
     def __init__(self, workflow=None):
@@ -110,13 +105,8 @@ class FakeRetryQueue:
             return None
 
         return self.due.pop(0)
-    def schedule(
-        self,
-        event_id,
-        run_id,
-        attempt,
-        delay,
-    ):
+
+    def schedule(self, event_id, run_id, attempt, delay):
         self.scheduled.append(
             {
                 "event_id": event_id,
@@ -184,6 +174,36 @@ def test_process_next_returns_false_when_queue_is_empty():
     )
 
     assert worker.process_next() is False
+
+
+def test_process_next_returns_false_for_malformed_json():
+    redis = FakeRedis(["not-json"])
+    run_repository = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository(),
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(),
+    )
+
+    assert worker.process_next() is False
+    assert run_repository.runs == []
+
+
+def test_process_next_returns_false_when_event_id_is_missing():
+    redis = FakeRedis([json.dumps({"foo": "bar"})])
+    run_repository = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository(),
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(),
+    )
+
+    assert worker.process_next() is False
+    assert run_repository.runs == []
 
 
 def test_process_next_creates_and_starts_run_with_active_workflow():
@@ -305,9 +325,7 @@ def test_retryable_execution_error_schedules_retry():
 
     class FailingExecutor:
         def execute(self, workflow, event):
-            raise RetryableExecutionError(
-                "Sentry API unavailable"
-            )
+            raise RetryableExecutionError("Sentry API unavailable")
 
     worker = EventWorker(
         redis_client=redis,
@@ -318,18 +336,11 @@ def test_retryable_execution_error_schedules_retry():
         retry_queue=retry_queue,
     )
 
-    redis.items.append(
-        json.dumps(
-            {
-                "event_id": event.event_id,
-            }
-        )
-    )
+    redis.items.append(json.dumps({"event_id": event.event_id}))
 
     result = worker.process_next()
 
     assert result is True
-
     assert len(retry_queue.scheduled) == 1
 
     scheduled = retry_queue.scheduled[0]
@@ -337,6 +348,7 @@ def test_retryable_execution_error_schedules_retry():
     assert scheduled["event_id"] == event.event_id
     assert scheduled["attempt"] == 2
     assert scheduled["delay"] > 0
+
 
 def test_permanent_execution_error_does_not_schedule_retry():
     redis = FakeRedis()
@@ -353,9 +365,7 @@ def test_permanent_execution_error_does_not_schedule_retry():
 
     class FailingExecutor:
         def execute(self, workflow, event):
-            raise PermanentExecutionError(
-                "Invalid workflow configuration"
-            )
+            raise PermanentExecutionError("Invalid workflow configuration")
 
     worker = EventWorker(
         redis_client=redis,
@@ -366,13 +376,7 @@ def test_permanent_execution_error_does_not_schedule_retry():
         retry_queue=retry_queue,
     )
 
-    redis.items.append(
-        json.dumps(
-            {
-                "event_id": event.event_id,
-            }
-        )
-    )
+    redis.items.append(json.dumps({"event_id": event.event_id}))
 
     result = worker.process_next()
 
@@ -391,14 +395,12 @@ def test_process_retry_next_returns_false_when_no_retry_is_due():
 
     assert worker.process_retry_next() is False
 
+
 def test_process_retry_next_completes_existing_run():
     event = make_event()
     workflow = make_workflow()
 
-    event_repository = FakeEventRepository(
-        {event.event_id: event}
-    )
-
+    event_repository = FakeEventRepository({event.event_id: event})
     run_repository = FakeRunRepository()
 
     run = WorkflowRun(
@@ -437,16 +439,14 @@ def test_process_retry_next_completes_existing_run():
     )
 
     assert worker.process_retry_next() is True
-
     assert executor.calls == [(workflow, event)]
-
     assert run_repository.status_updates == [
         (run.run_id, RunStatus.PROCESSING),
         (run.run_id, RunStatus.COMPLETED),
     ]
-
     assert run.run_id == "run-retry"
     assert run.attempt == 2
+
 
 def test_process_retry_next_dead_letters_after_max_attempts():
     event = make_event()
@@ -470,16 +470,16 @@ def test_process_retry_next_dead_letters_after_max_attempts():
     run_repository.runs.append(run)
 
     workflow_service = FakeWorkflowService(workflow)
-    executor = FakeWorkflowExecutor(
-        RetryableExecutionError("temporary failure")
-    )
+    executor = FakeWorkflowExecutor(RetryableExecutionError("temporary failure"))
 
     retry_queue = FakeRetryQueue()
-    retry_queue.due.append({
-        "event_id": event.event_id,
-        "run_id": run.run_id,
-        "attempt": 3,
-    })
+    retry_queue.due.append(
+        {
+            "event_id": event.event_id,
+            "run_id": run.run_id,
+            "attempt": 3,
+        }
+    )
 
     worker = EventWorker(
         redis_client=redis,
@@ -499,6 +499,7 @@ def test_process_retry_next_dead_letters_after_max_attempts():
         (run.run_id, RunStatus.DEAD_LETTER),
     ]
     assert retry_queue.scheduled == []
+
 
 def test_process_retry_next_permanent_failure_does_not_retry():
     event = make_event()
@@ -522,16 +523,16 @@ def test_process_retry_next_permanent_failure_does_not_retry():
     run_repository.runs.append(run)
 
     workflow_service = FakeWorkflowService(workflow)
-    executor = FakeWorkflowExecutor(
-        PermanentExecutionError("invalid configuration")
-    )
+    executor = FakeWorkflowExecutor(PermanentExecutionError("invalid configuration"))
 
     retry_queue = FakeRetryQueue()
-    retry_queue.due.append({
-        "event_id": event.event_id,
-        "run_id": run.run_id,
-        "attempt": 2,
-    })
+    retry_queue.due.append(
+        {
+            "event_id": event.event_id,
+            "run_id": run.run_id,
+            "attempt": 2,
+        }
+    )
 
     worker = EventWorker(
         redis_client=redis,
