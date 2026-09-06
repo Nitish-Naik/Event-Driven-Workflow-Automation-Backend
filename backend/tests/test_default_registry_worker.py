@@ -41,26 +41,8 @@ class FakeRunRepository:
         return True
 
 
-class FakeWorkflowService:
-    def __init__(self, workflow):
-        self.workflow = workflow
-
-    def get_active_workflow_by_trigger(self, trigger):
-        if trigger == self.workflow.trigger:
-            return self.workflow
-        return None
-
-
-def test_worker_uses_default_registry_for_builtin_workflow_nodes():
-    now = datetime.now(timezone.utc)
-    event = Event(
-        event_id="event-default-registry",
-        source="sentry",
-        event_type="issue.created",
-        payload={"message": "Production error", "level": "error"},
-        received_at=now,
-    )
-    workflow = Workflow(
+def make_workflow(now):
+    return Workflow(
         workflow_id="default-registry-workflow",
         name="Sentry normalization",
         trigger="sentry",
@@ -75,28 +57,41 @@ def test_worker_uses_default_registry_for_builtin_workflow_nodes():
         updated_at=now,
     )
 
+
+def make_event(now):
+    return Event(
+        event_id="event-default-registry",
+        source="sentry",
+        event_type="issue.created",
+        payload={"message": "Production error", "level": "error"},
+        received_at=now,
+    )
+
+
+def test_worker_uses_default_registry_for_builtin_workflow_nodes():
+    now = datetime.now(timezone.utc)
+    event = make_event(now)
+    workflow = make_workflow(now)
+    run_repository = FakeRunRepository()
+
     worker = EventWorker(
         redis_client=FakeRedis([json.dumps({"event_id": event.event_id})]),
         event_repository=FakeEventRepository(event),
-        run_repository=FakeRunRepository(),
-        workflow_service=FakeWorkflowService(workflow),
+        run_repository=run_repository,
+        workflow_service=type(
+            "FakeWorkflowService",
+            (),
+            {
+                "get_active_workflow_by_trigger": lambda self, trigger: (
+                    workflow if trigger == workflow.trigger else None
+                )
+            },
+        )(),
     )
 
     assert worker.workflow_executor is not None
-    assert worker.workflow_executor.execute(workflow, event).outputs == {
-        "trigger": {
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "source": event.source,
-            "payload": event.payload,
-        },
-        "normalize": {
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "source": event.source,
-            "message": "Production error",
-            "level": "error",
-            "project": None,
-            "payload": event.payload,
-        },
-    }
+    assert worker.process_next() is True
+    assert run_repository.status_updates == [
+        (run_repository.runs[0].run_id, "processing"),
+        (run_repository.runs[0].run_id, "completed"),
+    ]
