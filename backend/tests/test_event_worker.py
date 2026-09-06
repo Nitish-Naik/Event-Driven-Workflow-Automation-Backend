@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from app.schemas.event import Event
 from app.worker.event_worker import EventWorker
+from app.schemas.run import RunStatus
 
 
 class FakeRedis:
@@ -63,3 +64,51 @@ def test_process_next_returns_false_when_queue_is_empty():
     )
 
     assert worker.process_next() is False
+
+
+class FakeRunRepository:
+    def __init__(self):
+        self.runs = []
+
+    def create(self, run):
+        self.runs.append(run)
+        return run.run_id
+
+def test_process_next_creates_workflow_run():
+    event_id = "event-456"
+
+    redis = FakeRedis(
+        [
+            json.dumps({"event_id": event_id})
+        ]
+    )
+
+    event = Event(
+        event_id=event_id,
+        source="sentry",
+        event_type="issue.created",
+        received_at=datetime.now(timezone.utc),
+    )
+
+    event_repository = FakeEventRepository(
+        {event_id: event}
+    )
+
+    run_repository = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=event_repository,
+        run_repository=run_repository,
+    )
+
+    assert worker.process_next() is True
+
+    assert len(run_repository.runs) == 1
+
+    run = run_repository.runs[0]
+
+    assert run.event_id == event_id
+    assert run.workflow_id == "default"
+    assert run.workflow_version == 1
+    assert run.status == RunStatus.PROCESSING
