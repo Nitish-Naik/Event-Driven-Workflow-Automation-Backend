@@ -1,12 +1,13 @@
 import json
+import uuid
+from datetime import datetime, timezone
 
 from app.db.redis import get_redis
 from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
 from app.schemas.run import RunStatus, WorkflowRun
+from app.services.workflow import WorkflowService
 
-import uuid
-from datetime import datetime, timezone
 
 class EventWorker:
     QUEUE_NAME = "sentry:events"
@@ -16,6 +17,7 @@ class EventWorker:
         redis_client=None,
         event_repository=None,
         run_repository=None,
+        workflow_service=None,
     ):
         self.redis = redis_client if redis_client is not None else get_redis()
         self.event_repository = (
@@ -24,10 +26,15 @@ class EventWorker:
             else EventRepository()
         )
         self.run_repository = (
-        run_repository
-        if run_repository is not None
-        else WorkflowRunRepository()
-    )
+            run_repository
+            if run_repository is not None
+            else WorkflowRunRepository()
+        )
+        self.workflow_service = (
+            workflow_service
+            if workflow_service is not None
+            else WorkflowService()
+        )
 
     def process_next(self) -> bool:
         item = self.redis.lpop(self.QUEUE_NAME)
@@ -42,13 +49,20 @@ class EventWorker:
 
         if event is None:
             return False
-        
+
+        workflow = self.workflow_service.get_active_workflow_by_trigger(
+            event.source
+        )
+
+        if workflow is None:
+            return False
+
         now = datetime.now(timezone.utc)
 
         run = WorkflowRun(
             run_id=str(uuid.uuid4()),
-            workflow_id="default",
-            workflow_version=1,
+            workflow_id=workflow.workflow_id,
+            workflow_version=workflow.version,
             event_id=event.event_id,
             status=RunStatus.PROCESSING,
             created_at=now,
