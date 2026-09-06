@@ -27,3 +27,23 @@ class WorkflowGraph:
             (node for node in self.workflow.nodes if node.id not in targets),
             key=lambda node: node.id,
         )
+
+    def validate_acyclic(self) -> None:
+        """Raise ValueError if any workflow component contains a cycle."""
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(node_id: str) -> None:
+            if node_id in visiting:
+                raise ValueError(f"Workflow contains a cycle involving node '{node_id}'")
+            if node_id in visited:
+                return
+
+            visiting.add(node_id)
+            for child_id in self.get_children(node_id):
+                visit(child_id)
+            visiting.remove(node_id)
+            visited.add(node_id)
+
+        for node_id in sorted(self.nodes):
+            visit(node_id)
