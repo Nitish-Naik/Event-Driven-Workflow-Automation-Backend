@@ -206,6 +206,22 @@ def test_process_next_returns_false_when_event_id_is_missing():
     assert run_repository.runs == []
 
 
+def test_process_next_returns_false_when_event_is_missing():
+    event_id = "missing-event"
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    run_repository = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository(),
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(),
+    )
+
+    assert worker.process_next() is False
+    assert run_repository.runs == []
+
+
 def test_process_next_creates_and_starts_run_with_active_workflow():
     event_id = "event-456"
     workflow = make_workflow(
@@ -394,6 +410,107 @@ def test_process_retry_next_returns_false_when_no_retry_is_due():
     )
 
     assert worker.process_retry_next() is False
+
+
+def test_process_retry_next_returns_false_when_event_is_missing():
+    workflow = make_workflow()
+    run = WorkflowRun(
+        run_id="run-missing-event",
+        workflow_id=workflow.workflow_id,
+        workflow_version=workflow.version,
+        event_id="missing-event",
+        status=RunStatus.RETRYING,
+        attempt=2,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    run_repository = FakeRunRepository()
+    run_repository.create(run)
+
+    retry_queue = FakeRetryQueue()
+    retry_queue.due.append(
+        {
+            "event_id": run.event_id,
+            "run_id": run.run_id,
+            "attempt": run.attempt,
+        }
+    )
+
+    worker = EventWorker(
+        redis_client=FakeRedis(),
+        event_repository=FakeEventRepository(),
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(workflow),
+        retry_queue=retry_queue,
+    )
+
+    assert worker.process_retry_next() is False
+    assert run_repository.status_updates == []
+
+
+def test_process_retry_next_returns_false_when_run_is_missing():
+    event = make_event()
+    workflow = make_workflow()
+
+    retry_queue = FakeRetryQueue()
+    retry_queue.due.append(
+        {
+            "event_id": event.event_id,
+            "run_id": "missing-run",
+            "attempt": 2,
+        }
+    )
+
+    worker = EventWorker(
+        redis_client=FakeRedis(),
+        event_repository=FakeEventRepository({event.event_id: event}),
+        run_repository=FakeRunRepository(),
+        workflow_service=FakeWorkflowService(workflow),
+        retry_queue=retry_queue,
+    )
+
+    assert worker.process_retry_next() is False
+
+
+def test_process_retry_next_returns_false_when_workflow_version_is_missing():
+    event = make_event()
+    stored_workflow = make_workflow(version=3)
+    current_workflow = make_workflow(version=4)
+
+    run = WorkflowRun(
+        run_id="run-missing-workflow-version",
+        workflow_id=stored_workflow.workflow_id,
+        workflow_version=stored_workflow.version,
+        event_id=event.event_id,
+        status=RunStatus.RETRYING,
+        attempt=2,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    run_repository = FakeRunRepository()
+    run_repository.create(run)
+
+    retry_queue = FakeRetryQueue()
+    retry_queue.due.append(
+        {
+            "event_id": event.event_id,
+            "run_id": run.run_id,
+            "attempt": run.attempt,
+        }
+    )
+
+    worker = EventWorker(
+        redis_client=FakeRedis(),
+        event_repository=FakeEventRepository({event.event_id: event}),
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(current_workflow),
+        retry_queue=retry_queue,
+    )
+
+    assert worker.process_retry_next() is False
+    assert run_repository.status_updates == []
 
 
 def test_process_retry_next_completes_existing_run():
