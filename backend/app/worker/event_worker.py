@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from app.db.redis import get_redis
 from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
+from app.execution.defaults import create_default_registry
+from app.execution.executor import WorkflowNodeExecutor
 from app.schemas.run import RunStatus, WorkflowRun
 from app.services.workflow import WorkflowService
 from app.queue.retry_queue import RetryQueue
@@ -40,7 +42,11 @@ class EventWorker:
             if workflow_service is not None
             else WorkflowService()
         )
-        self.workflow_executor = workflow_executor
+        self.workflow_executor = (
+            workflow_executor
+            if workflow_executor is not None
+            else WorkflowNodeExecutor(registry=create_default_registry())
+        )
         self.retry_queue = (
             retry_queue if retry_queue is not None else RetryQueue(self.redis)
         )
@@ -50,9 +56,6 @@ class EventWorker:
             run.run_id,
             RunStatus.PROCESSING,
         )
-
-        if self.workflow_executor is None:
-            return True
 
         try:
             self.workflow_executor.execute(workflow, event)
