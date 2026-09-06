@@ -44,15 +44,15 @@ def test_executes_linear_workflow_and_propagates_values():
     context = make_context(workflow)
     calls = []
 
-    def source(ctx, config):
+    def source(ctx, config, inputs):
         calls.append("a")
         return {"value": 10}
 
-    def transform(ctx, config):
+    def transform(ctx, config, inputs):
         calls.append("b")
         return {"value": ctx.values["a"]["value"] * 2}
 
-    def sink(ctx, config):
+    def sink(ctx, config, inputs):
         calls.append("c")
         return {"value": ctx.values["b"]["value"] + 5}
 
@@ -83,7 +83,7 @@ def test_shared_downstream_node_executes_only_once():
     context = make_context(workflow)
     calls = []
 
-    def handler(ctx, config):
+    def handler(ctx, config, inputs):
         calls.append(config["name"])
         return {"name": config["name"]}
 
@@ -115,7 +115,7 @@ def test_sibling_execution_order_is_deterministic():
     context = make_context(workflow)
     calls = []
 
-    def handler(ctx, config):
+    def handler(ctx, config, inputs):
         calls.append(config["id"])
         return {}
 
@@ -135,3 +135,63 @@ def test_missing_handler_raises_execution_error():
         match="No handler registered for node type 'unknown'",
     ):
         WorkflowNodeExecutor().execute(make_context(workflow))
+
+
+def trigger_handler(context, config, inputs):
+    return {
+        "message": "Database failed",
+    }
+
+
+def consumer_handler(context, config, inputs):
+    return {
+        "received": inputs["message"],
+    }
+
+def test_node_input_reference_propagates_upstream_value():
+    workflow = make_workflow(
+        [
+            WorkflowNode(id="source", type="source"),
+            WorkflowNode(
+                id="consumer",
+                type="consumer",
+                config={
+                    "inputs": {
+                        "value": {
+                            "$ref": "source.value",
+                        }
+                    }
+                },
+            ),
+        ],
+        [
+            WorkflowEdge(
+                source="source",
+                target="consumer",
+            ),
+        ],
+    )
+
+    context = make_context(workflow)
+
+    def source_handler(ctx, config, inputs):
+        return {
+            "value": 10,
+        }
+
+    def consumer_handler(ctx, config, inputs):
+        return {
+            "received": inputs["value"],
+        }
+
+    executor = WorkflowNodeExecutor(
+        {
+            "source": source_handler,
+            "consumer": consumer_handler,
+        }
+    )
+
+    result = executor.execute(context)
+
+    assert result.outputs["source"]["value"] == 10
+    assert result.outputs["consumer"]["received"] == 10

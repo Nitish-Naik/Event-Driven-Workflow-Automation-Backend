@@ -50,7 +50,7 @@ def test_registry_can_be_initialized_with_handlers():
 def test_registry_executes_registered_handler():
     calls = []
 
-    def handler(context, config):
+    def handler(context, config, inputs):
         calls.append(config)
         return {"normalized": True}
 

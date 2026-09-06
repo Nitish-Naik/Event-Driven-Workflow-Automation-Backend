@@ -8,7 +8,7 @@ SENTRY_TRIGGER = "sentry_trigger"
 NORMALIZE_EVENT = "normalize_event"
 
 
-def sentry_trigger_handler(context: ExecutionContext, config: Any) -> dict[str, Any]:
+def sentry_trigger_handler(context: ExecutionContext, config: Any, inputs: dict[str, Any],) -> dict[str, Any]:
     """Expose the incoming Sentry event as the node output."""
     return {
         "event_id": context.event.event_id,
@@ -18,7 +18,7 @@ def sentry_trigger_handler(context: ExecutionContext, config: Any) -> dict[str, 
     }
 
 
-def normalize_event_handler(context: ExecutionContext, config: Any) -> dict[str, Any]:
+def normalize_event_handler(context: ExecutionContext, config: Any, inputs: dict[str, Any],) -> dict[str, Any]:
     """Create a stable event shape for downstream workflow nodes."""
     payload = context.event.payload
     return {

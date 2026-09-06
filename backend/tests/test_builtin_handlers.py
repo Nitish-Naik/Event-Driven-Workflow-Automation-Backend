@@ -34,7 +34,7 @@ def make_context(payload):
 def test_sentry_trigger_exposes_incoming_event():
     context = make_context({"message": "database timeout"})
 
-    result = sentry_trigger_handler(context, {})
+    result = sentry_trigger_handler(context, {}, {})
 
     assert result == {
         "event_id": "event-1",
@@ -54,7 +54,7 @@ def test_normalize_event_creates_stable_shape():
         }
     )
 
-    result = normalize_event_handler(context, {})
+    result = normalize_event_handler(context, {}, {})
 
     assert result["event_id"] == "event-1"
     assert result["event_type"] == "sentry.issue"
@@ -68,7 +68,7 @@ def test_normalize_event_creates_stable_shape():
 def test_normalize_event_handles_optional_fields():
     context = make_context({"message": "timeout"})
 
-    result = normalize_event_handler(context, {})
+    result = normalize_event_handler(context, {}, {})
 
     assert result["message"] == "timeout"
     assert result["level"] is None

@@ -27,9 +27,14 @@ class NodeRegistry:
         return dict(self._handlers)
 
     def execute(
-        self,
-        node_type: str,
-        context: ExecutionContext,
-        config: object,
+    self,
+    node_type: str,
+    context: ExecutionContext,
+    config: object,
+    inputs: dict | None = None,
     ) -> dict:
-        return self.get(node_type)(context, config)
+        return self.get(node_type)(
+            context,
+            config,
+            inputs or {},
+        )

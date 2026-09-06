@@ -2,6 +2,7 @@ from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
 from app.execution.graph import WorkflowGraph
+from app.execution.inputs import resolve_input_value
 from app.execution.registry import NodeRegistry
 from app.execution.types import NodeHandler, WorkflowExecutionError
 
@@ -14,6 +15,7 @@ class WorkflowNodeExecutor:
     ):
         if handlers is not None and registry is not None:
             raise ValueError("Provide either handlers or registry, not both")
+
         self.registry = registry or NodeRegistry(handlers)
 
     def execute(self, context: ExecutionContext) -> ExecutionResult:
@@ -31,7 +33,24 @@ class WorkflowNodeExecutor:
                     f"Workflow node '{node_id}' does not exist"
                 )
 
-            result = self.registry.execute(node.type, context, node.config)
+            node_inputs = {}
+
+            if isinstance(node.config, dict):
+                configured_inputs = node.config.get("inputs", {})
+
+                if isinstance(configured_inputs, dict):
+                    node_inputs = {
+                        name: resolve_input_value(context, value)
+                        for name, value in configured_inputs.items()
+                    }
+
+            result = self.registry.execute(
+                node.type,
+                context,
+                node.config,
+                node_inputs,
+            )
+
             if result is None:
                 result = {}
 
@@ -48,5 +67,4 @@ class WorkflowNodeExecutor:
         return ExecutionResult(outputs=outputs)
 
 
-# Backward-compatible imports for callers that imported these from executor.
 __all__ = ["NodeHandler", "WorkflowExecutionError", "WorkflowNodeExecutor"]
