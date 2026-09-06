@@ -10,6 +10,7 @@ def make_workflow(**overrides):
     data = {
         "workflow_id": "workflow-1",
         "name": "Sentry Incident Triage",
+        "trigger": "sentry",
         "nodes": [
             {
                 "id": "sentry",
@@ -38,8 +39,17 @@ def test_valid_workflow():
     workflow = Workflow(**make_workflow())
 
     assert workflow.workflow_id == "workflow-1"
+    assert workflow.trigger == "sentry"
     assert workflow.version == 1
     assert workflow.status == "draft"
+
+
+def test_missing_trigger_is_rejected():
+    data = make_workflow()
+    del data["trigger"]
+
+    with pytest.raises(ValidationError):
+        Workflow(**data)
 
 
 def test_duplicate_node_ids_are_rejected():
