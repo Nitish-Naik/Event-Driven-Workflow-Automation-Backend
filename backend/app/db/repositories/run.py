@@ -7,6 +7,15 @@ from app.schemas.run import RunStatus, WorkflowRun
 
 
 class WorkflowRunRepository:
+    ALLOWED_TRANSITIONS = {
+        RunStatus.QUEUED: {RunStatus.PROCESSING},
+        RunStatus.PROCESSING: {RunStatus.COMPLETED, RunStatus.FAILED},
+        RunStatus.FAILED: {RunStatus.RETRYING},
+        RunStatus.RETRYING: {RunStatus.PROCESSING},
+        RunStatus.COMPLETED: set(),
+        RunStatus.DEAD_LETTER: set(),
+    }
+
     def __init__(self, database=None):
         self.database = (
             database
@@ -37,8 +46,20 @@ class WorkflowRunRepository:
         run_id: str,
         status: RunStatus,
     ) -> bool:
+        current = self.get_by_id(run_id)
+
+        if current is None:
+            return False
+
+        allowed = self.ALLOWED_TRANSITIONS[current.status]
+        if status not in allowed:
+            raise ValueError(
+                f"Invalid workflow run transition: "
+                f"{current.status} -> {status}"
+            )
+
         result = self.collection.update_one(
-            {"run_id": run_id},
+            {"run_id": run_id, "status": current.status},
             {
                 "$set": {
                     "status": status,
