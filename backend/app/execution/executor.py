@@ -20,6 +20,11 @@ class WorkflowNodeExecutor:
 
     def execute(self, context: ExecutionContext) -> ExecutionResult:
         graph = WorkflowGraph(context.workflow)
+        try:
+            graph.validate_acyclic()
+        except ValueError as exc:
+            raise WorkflowExecutionError(str(exc)) from exc
+
         executed: set[str] = set()
         outputs: dict[str, Any] = {}
 
