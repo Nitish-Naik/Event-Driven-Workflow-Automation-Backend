@@ -6,6 +6,7 @@ from app.execution.contracts import ExecutionContext
 from app.execution.executor import WorkflowExecutionError, WorkflowNodeExecutor
 from app.schemas.event import Event
 from app.schemas.workflow import Workflow, WorkflowEdge, WorkflowNode
+from app.services.retry import RetryableExecutionError
 
 
 def make_workflow(nodes, edges):
@@ -68,6 +69,25 @@ def test_executor_preserves_workflow_execution_error():
     executor = WorkflowNodeExecutor({"source": failing_handler})
 
     with pytest.raises(WorkflowExecutionError) as exc_info:
+        executor.execute(context)
+
+    assert exc_info.value is expected
+
+
+def test_executor_preserves_retryable_execution_error():
+    workflow = make_workflow(
+        [WorkflowNode(id="source", type="source")],
+        [],
+    )
+    context = make_context(workflow)
+    expected = RetryableExecutionError("Sentry API unavailable")
+
+    def failing_handler(ctx, config, inputs):
+        raise expected
+
+    executor = WorkflowNodeExecutor({"source": failing_handler})
+
+    with pytest.raises(RetryableExecutionError) as exc_info:
         executor.execute(context)
 
     assert exc_info.value is expected
