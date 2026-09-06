@@ -51,6 +51,20 @@ class FakeWorkflowService:
         return None
 
 
+class FakeWorkflowExecutor:
+    def __init__(self, error=None):
+        self.calls = []
+        self.error = error
+
+    def execute(self, workflow, event):
+        self.calls.append((workflow, event))
+
+        if self.error is not None:
+            raise self.error
+
+        return None
+
+
 def make_event(event_id="event-123"):
     return Event(
         event_id=event_id,
@@ -140,6 +154,58 @@ def test_process_next_creates_and_starts_run_with_active_workflow():
     assert run.status == RunStatus.QUEUED
     assert run_repository.status_updates == [
         (run.run_id, RunStatus.PROCESSING),
+    ]
+
+
+def test_process_next_completes_run_after_successful_execution():
+    event_id = "event-success"
+    workflow = make_workflow()
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    event_repository = FakeEventRepository({event_id: make_event(event_id)})
+    run_repository = FakeRunRepository()
+    executor = FakeWorkflowExecutor()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=event_repository,
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(workflow),
+        workflow_executor=executor,
+    )
+
+    assert worker.process_next() is True
+
+    run = run_repository.runs[0]
+    assert executor.calls == [(workflow, event_repository.events[event_id])]
+    assert run_repository.status_updates == [
+        (run.run_id, RunStatus.PROCESSING),
+        (run.run_id, RunStatus.COMPLETED),
+    ]
+
+
+def test_process_next_fails_run_when_execution_raises():
+    event_id = "event-failure"
+    workflow = make_workflow()
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    event_repository = FakeEventRepository({event_id: make_event(event_id)})
+    run_repository = FakeRunRepository()
+    executor = FakeWorkflowExecutor(error=RuntimeError("node failed"))
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=event_repository,
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(workflow),
+        workflow_executor=executor,
+    )
+
+    assert worker.process_next() is True
+
+    run = run_repository.runs[0]
+    assert executor.calls == [(workflow, event_repository.events[event_id])]
+    assert run_repository.status_updates == [
+        (run.run_id, RunStatus.PROCESSING),
+        (run.run_id, RunStatus.FAILED),
     ]
 
 
