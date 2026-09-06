@@ -64,11 +64,12 @@ class EventWorker:
             workflow_id=workflow.workflow_id,
             workflow_version=workflow.version,
             event_id=event.event_id,
-            status=RunStatus.PROCESSING,
+            status=RunStatus.QUEUED,
             created_at=now,
             updated_at=now,
         )
 
         self.run_repository.create(run)
+        self.run_repository.update_status(run.run_id, RunStatus.PROCESSING)
 
         return True
