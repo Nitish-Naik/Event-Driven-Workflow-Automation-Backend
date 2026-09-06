@@ -1,16 +1,9 @@
-from collections.abc import Callable
 from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
 from app.execution.graph import WorkflowGraph
 from app.execution.registry import NodeRegistry
-
-
-NodeHandler = Callable[[ExecutionContext, Any], dict[str, Any]]
-
-
-class WorkflowExecutionError(Exception):
-    """Raised when a workflow node cannot be executed."""
+from app.execution.types import NodeHandler, WorkflowExecutionError
 
 
 class WorkflowNodeExecutor:
@@ -19,6 +12,8 @@ class WorkflowNodeExecutor:
         handlers: dict[str, NodeHandler] | None = None,
         registry: NodeRegistry | None = None,
     ):
+        if handlers is not None and registry is not None:
+            raise ValueError("Provide either handlers or registry, not both")
         self.registry = registry or NodeRegistry(handlers)
 
     def execute(self, context: ExecutionContext) -> ExecutionResult:
@@ -51,3 +46,7 @@ class WorkflowNodeExecutor:
             visit(start_node.id)
 
         return ExecutionResult(outputs=outputs)
+
+
+# Backward-compatible imports for callers that imported these from executor.
+__all__ = ["NodeHandler", "WorkflowExecutionError", "WorkflowNodeExecutor"]
