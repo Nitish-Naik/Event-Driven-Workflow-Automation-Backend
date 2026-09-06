@@ -16,12 +16,13 @@ def make_workflow(
     return Workflow(
         workflow_id=workflow_id,
         name="Test Workflow",
+        trigger="sentry",
         version=version,
         status=status,
         nodes=[],
         edges=[],
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        created_at=now,
+        updated_at=now,
     )
 
 
