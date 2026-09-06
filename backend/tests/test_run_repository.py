@@ -22,7 +22,7 @@ def run_repository():
     database.drop_collection("workflow_runs")
 
 
-def create_run(run_id="run-123", status=RunStatus.QUEUED):
+def create_run(run_id="run-123", status=RunStatus.QUEUED, attempt=1):
     now = datetime.now(timezone.utc)
 
     return WorkflowRun(
@@ -31,6 +31,7 @@ def create_run(run_id="run-123", status=RunStatus.QUEUED):
         workflow_version=1,
         event_id="event-123",
         status=status,
+        attempt=attempt,
         created_at=now,
         updated_at=now,
     )
@@ -49,6 +50,7 @@ def test_create_and_get_run(run_repository):
     assert result.workflow_version == 1
     assert result.event_id == "event-123"
     assert result.status == RunStatus.QUEUED
+    assert result.attempt == 1
 
 
 def test_run_id_is_unique(run_repository):
@@ -107,6 +109,20 @@ def test_failed_run_can_enter_retrying(run_repository):
 
     assert updated is True
     assert run_repository.get_by_id("run-123").status == RunStatus.RETRYING
+
+
+def test_failed_run_can_enter_dead_letter(run_repository):
+    run_repository.create(
+        create_run(status=RunStatus.FAILED, attempt=3)
+    )
+
+    updated = run_repository.update_status(
+        "run-123",
+        RunStatus.DEAD_LETTER,
+    )
+
+    assert updated is True
+    assert run_repository.get_by_id("run-123").status == RunStatus.DEAD_LETTER
 
 
 def test_retrying_run_can_return_to_processing(run_repository):
