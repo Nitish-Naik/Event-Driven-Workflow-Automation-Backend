@@ -106,6 +106,7 @@ def test_resolve_node_input_raises_for_non_dictionary_output():
             "event_id",
         )
 
+
 def test_resolve_input_value_returns_literal():
     context = make_context()
 
@@ -132,6 +133,59 @@ def test_resolve_input_value_resolves_reference():
     )
 
     assert result == "Database connection failed"
+
+
+def test_resolve_input_value_resolves_nested_references():
+    context = make_context(
+        {
+            "normalize": {
+                "message": "Database connection failed",
+                "level": "error",
+            }
+        }
+    )
+
+    result = resolve_input_value(
+        context,
+        {
+            "payload": {
+                "message": {"$ref": "normalize.message"},
+                "level": {"$ref": "normalize.level"},
+            },
+            "static": "value",
+        },
+    )
+
+    assert result == {
+        "payload": {
+            "message": "Database connection failed",
+            "level": "error",
+        },
+        "static": "value",
+    }
+
+
+def test_resolve_input_value_resolves_references_inside_lists():
+    context = make_context(
+        {
+            "normalize": {
+                "message": "Database connection failed",
+            }
+        }
+    )
+
+    result = resolve_input_value(
+        context,
+        [
+            "static",
+            {"$ref": "normalize.message"},
+        ],
+    )
+
+    assert result == [
+        "static",
+        "Database connection failed",
+    ]
 
 
 def test_resolve_input_value_rejects_invalid_reference():
