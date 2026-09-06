@@ -1,10 +1,35 @@
+from datetime import datetime, timezone
+
 import pytest
 
-from app.execution.executor import WorkflowNodeExecutor
-from app.execution.types import WorkflowExecutionError
-from app.schemas.workflow import WorkflowEdge, WorkflowNode
+from app.execution.contracts import ExecutionContext
+from app.execution.executor import WorkflowExecutionError, WorkflowNodeExecutor
+from app.schemas.event import Event
+from app.schemas.workflow import Workflow, WorkflowEdge, WorkflowNode
 
-from test_node_executor import make_context, make_workflow
+
+def make_workflow(nodes, edges):
+    now = datetime.now(timezone.utc)
+    return Workflow(
+        workflow_id="wf-1",
+        name="test",
+        trigger="sentry.issue",
+        nodes=nodes,
+        edges=edges,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def make_context(workflow):
+    event = Event(
+        event_id="event-1",
+        source="sentry",
+        event_type="sentry.issue",
+        payload={"message": "test"},
+        received_at=datetime.now(timezone.utc),
+    )
+    return ExecutionContext(workflow=workflow, event=event)
 
 
 def test_executor_wraps_unexpected_handler_exception():
