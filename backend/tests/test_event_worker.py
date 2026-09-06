@@ -2,8 +2,9 @@ import json
 from datetime import datetime, timezone
 
 from app.schemas.event import Event
-from app.worker.event_worker import EventWorker
 from app.schemas.run import RunStatus
+from app.schemas.workflow import Workflow
+from app.worker.event_worker import EventWorker
 
 
 class FakeRedis:
@@ -25,47 +26,6 @@ class FakeEventRepository:
         return self.events.get(event_id)
 
 
-def test_process_next_event():
-    event_id = "event-123"
-
-    redis = FakeRedis(
-        [
-            json.dumps({"event_id": event_id})
-        ]
-    )
-
-    event = Event(
-        event_id=event_id,
-        source="sentry",
-        event_type="issue.created",
-        received_at=datetime.now(timezone.utc)
-    )
-
-    repository = FakeEventRepository(
-        {event_id: event}
-    )
-
-    worker = EventWorker(
-        redis_client=redis,
-        event_repository=repository,
-    )
-
-    assert worker.process_next() is True
-    assert redis.items == []
-
-
-def test_process_next_returns_false_when_queue_is_empty():
-    redis = FakeRedis()
-    repository = FakeEventRepository()
-
-    worker = EventWorker(
-        redis_client=redis,
-        event_repository=repository,
-    )
-
-    assert worker.process_next() is False
-
-
 class FakeRunRepository:
     def __init__(self):
         self.runs = []
@@ -74,32 +34,93 @@ class FakeRunRepository:
         self.runs.append(run)
         return run.run_id
 
-def test_process_next_creates_workflow_run():
-    event_id = "event-456"
 
-    redis = FakeRedis(
-        [
-            json.dumps({"event_id": event_id})
-        ]
-    )
+class FakeWorkflowService:
+    def __init__(self, workflow=None):
+        self.workflow = workflow
 
-    event = Event(
+    def get_active_workflow_by_trigger(self, trigger):
+        if self.workflow is not None and self.workflow.trigger == trigger:
+            return self.workflow
+
+        return None
+
+
+def make_event(event_id="event-123"):
+    return Event(
         event_id=event_id,
         source="sentry",
         event_type="issue.created",
         received_at=datetime.now(timezone.utc),
     )
 
-    event_repository = FakeEventRepository(
-        {event_id: event}
+
+def make_workflow(
+    workflow_id="sentry-workflow",
+    version=3,
+    trigger="sentry",
+):
+    now = datetime.now(timezone.utc)
+
+    return Workflow(
+        workflow_id=workflow_id,
+        name="Sentry Incident Triage",
+        trigger=trigger,
+        version=version,
+        status="active",
+        nodes=[
+            {"id": "trigger", "type": "sentry_trigger"},
+            {"id": "ai", "type": "ai_analysis"},
+        ],
+        edges=[
+            {"source": "trigger", "target": "ai"},
+        ],
+        created_at=now,
+        updated_at=now,
     )
 
+
+def test_process_next_event():
+    event_id = "event-123"
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    event_repository = FakeEventRepository({event_id: make_event(event_id)})
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=event_repository,
+        workflow_service=FakeWorkflowService(make_workflow()),
+    )
+
+    assert worker.process_next() is True
+    assert redis.items == []
+
+
+def test_process_next_returns_false_when_queue_is_empty():
+    worker = EventWorker(
+        redis_client=FakeRedis(),
+        event_repository=FakeEventRepository(),
+        workflow_service=FakeWorkflowService(),
+    )
+
+    assert worker.process_next() is False
+
+
+def test_process_next_creates_run_with_active_workflow():
+    event_id = "event-456"
+    workflow = make_workflow(
+        workflow_id="sentry-triage",
+        version=7,
+    )
+
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    event_repository = FakeEventRepository({event_id: make_event(event_id)})
     run_repository = FakeRunRepository()
 
     worker = EventWorker(
         redis_client=redis,
         event_repository=event_repository,
         run_repository=run_repository,
+        workflow_service=FakeWorkflowService(workflow),
     )
 
     assert worker.process_next() is True
@@ -109,6 +130,25 @@ def test_process_next_creates_workflow_run():
     run = run_repository.runs[0]
 
     assert run.event_id == event_id
-    assert run.workflow_id == "default"
-    assert run.workflow_version == 1
+    assert run.workflow_id == "sentry-triage"
+    assert run.workflow_version == 7
     assert run.status == RunStatus.PROCESSING
+
+
+def test_process_next_returns_false_when_no_active_workflow_matches_event():
+    event_id = "event-789"
+    redis = FakeRedis([json.dumps({"event_id": event_id})])
+    event_repository = FakeEventRepository({event_id: make_event(event_id)})
+    run_repository = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=event_repository,
+        run_repository=run_repository,
+        workflow_service=FakeWorkflowService(
+            make_workflow(trigger="github")
+        ),
+    )
+
+    assert worker.process_next() is False
+    assert run_repository.runs == []
