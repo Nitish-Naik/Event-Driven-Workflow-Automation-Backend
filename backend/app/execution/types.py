@@ -12,3 +12,7 @@ NodeHandler = Callable[
 
 class WorkflowExecutionError(Exception):
     """Raised when a workflow node cannot be executed."""
+
+
+class RetryableWorkflowExecutionError(WorkflowExecutionError):
+    """Raised when a node failure may succeed on a later attempt."""
