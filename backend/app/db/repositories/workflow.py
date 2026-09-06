@@ -47,6 +47,22 @@ class WorkflowRepository:
 
         return Workflow(**document)
 
+    def get_active_by_trigger(self, trigger: str) -> Workflow | None:
+        document = self.collection.find_one(
+            {
+                "trigger": trigger,
+                "status": "active",
+            },
+            sort=[("version", -1)],
+        )
+
+        if document is None:
+            return None
+
+        document.pop("_id", None)
+
+        return Workflow(**document)
+
     def create_indexes(self):
         self.collection.create_index(
             [
@@ -73,12 +89,16 @@ class WorkflowRepository:
             name="workflow_active_unique",
         )
 
+        self.collection.create_index(
+            [("trigger", ASCENDING), ("status", ASCENDING)],
+            name="workflow_trigger_status",
+        )
 
     def update_status(
-        self, 
+        self,
         workflow_id: str,
         version: int,
-        status: str
+        status: str,
     ) -> bool:
         result = self.collection.update_one(
             {
