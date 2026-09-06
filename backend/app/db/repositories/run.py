@@ -10,7 +10,7 @@ class WorkflowRunRepository:
     ALLOWED_TRANSITIONS = {
         RunStatus.QUEUED: {RunStatus.PROCESSING},
         RunStatus.PROCESSING: {RunStatus.COMPLETED, RunStatus.FAILED},
-        RunStatus.FAILED: {RunStatus.RETRYING},
+        RunStatus.FAILED: {RunStatus.RETRYING, RunStatus.DEAD_LETTER},
         RunStatus.RETRYING: {RunStatus.PROCESSING},
         RunStatus.COMPLETED: set(),
         RunStatus.DEAD_LETTER: set(),
