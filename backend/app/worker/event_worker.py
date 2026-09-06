@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.db.redis import get_redis
 from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
+from app.execution.contracts import ExecutionContext
 from app.execution.defaults import create_default_registry
 from app.execution.executor import WorkflowNodeExecutor
 from app.schemas.run import RunStatus, WorkflowRun
@@ -58,7 +59,14 @@ class EventWorker:
         )
 
         try:
-            self.workflow_executor.execute(workflow, event)
+            if isinstance(self.workflow_executor, WorkflowNodeExecutor):
+                context = ExecutionContext(
+                    workflow=workflow,
+                    event=event,
+                )
+                self.workflow_executor.execute(context)
+            else:
+                self.workflow_executor.execute(workflow, event)
         except Exception as exc:
             self.run_repository.update_status(
                 run.run_id,
