@@ -76,3 +76,31 @@ class WorkflowRunRepository:
             unique=True,
             name="run_id_unique",
         )
+
+    def update_retry_metadata(
+        self,
+        run_id: str,
+        attempt: int,
+        last_error: str,
+    ) -> bool:
+        result = self.collection.update_one(
+            {"run_id": run_id},
+            {
+                "$set": {
+                    "attempt": attempt,
+                    "last_error": last_error,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+
+        return result.modified_count == 1
+
+    def get_by_id(self, run_id: str) -> WorkflowRun | None:
+        document = self.collection.find_one({"run_id": run_id})
+
+        if document is None:
+            return None
+
+        document.pop("_id", None)
+        return WorkflowRun(**document)

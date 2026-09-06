@@ -22,7 +22,11 @@ def run_repository():
     database.drop_collection("workflow_runs")
 
 
-def create_run(run_id="run-123", status=RunStatus.QUEUED, attempt=1):
+def create_run(
+    run_id="run-123",
+    status=RunStatus.QUEUED,
+    attempt=1,
+):
     now = datetime.now(timezone.utc)
 
     return WorkflowRun(
@@ -53,6 +57,12 @@ def test_create_and_get_run(run_repository):
     assert result.attempt == 1
 
 
+def test_get_by_id_returns_none_for_unknown_run(run_repository):
+    result = run_repository.get_by_id("does-not-exist")
+
+    assert result is None
+
+
 def test_run_id_is_unique(run_repository):
     run_repository.create(create_run("run-123"))
 
@@ -76,7 +86,9 @@ def test_update_status(run_repository):
 
 
 def test_processing_run_can_complete(run_repository):
-    run_repository.create(create_run(status=RunStatus.PROCESSING))
+    run_repository.create(
+        create_run(status=RunStatus.PROCESSING)
+    )
 
     updated = run_repository.update_status(
         "run-123",
@@ -84,11 +96,16 @@ def test_processing_run_can_complete(run_repository):
     )
 
     assert updated is True
-    assert run_repository.get_by_id("run-123").status == RunStatus.COMPLETED
+    assert (
+        run_repository.get_by_id("run-123").status
+        == RunStatus.COMPLETED
+    )
 
 
 def test_processing_run_can_fail(run_repository):
-    run_repository.create(create_run(status=RunStatus.PROCESSING))
+    run_repository.create(
+        create_run(status=RunStatus.PROCESSING)
+    )
 
     updated = run_repository.update_status(
         "run-123",
@@ -96,11 +113,16 @@ def test_processing_run_can_fail(run_repository):
     )
 
     assert updated is True
-    assert run_repository.get_by_id("run-123").status == RunStatus.FAILED
+    assert (
+        run_repository.get_by_id("run-123").status
+        == RunStatus.FAILED
+    )
 
 
 def test_failed_run_can_enter_retrying(run_repository):
-    run_repository.create(create_run(status=RunStatus.FAILED))
+    run_repository.create(
+        create_run(status=RunStatus.FAILED)
+    )
 
     updated = run_repository.update_status(
         "run-123",
@@ -108,12 +130,18 @@ def test_failed_run_can_enter_retrying(run_repository):
     )
 
     assert updated is True
-    assert run_repository.get_by_id("run-123").status == RunStatus.RETRYING
+    assert (
+        run_repository.get_by_id("run-123").status
+        == RunStatus.RETRYING
+    )
 
 
 def test_failed_run_can_enter_dead_letter(run_repository):
     run_repository.create(
-        create_run(status=RunStatus.FAILED, attempt=3)
+        create_run(
+            status=RunStatus.FAILED,
+            attempt=3,
+        )
     )
 
     updated = run_repository.update_status(
@@ -122,11 +150,16 @@ def test_failed_run_can_enter_dead_letter(run_repository):
     )
 
     assert updated is True
-    assert run_repository.get_by_id("run-123").status == RunStatus.DEAD_LETTER
+    assert (
+        run_repository.get_by_id("run-123").status
+        == RunStatus.DEAD_LETTER
+    )
 
 
 def test_retrying_run_can_return_to_processing(run_repository):
-    run_repository.create(create_run(status=RunStatus.RETRYING))
+    run_repository.create(
+        create_run(status=RunStatus.RETRYING)
+    )
 
     updated = run_repository.update_status(
         "run-123",
@@ -134,7 +167,10 @@ def test_retrying_run_can_return_to_processing(run_repository):
     )
 
     assert updated is True
-    assert run_repository.get_by_id("run-123").status == RunStatus.PROCESSING
+    assert (
+        run_repository.get_by_id("run-123").status
+        == RunStatus.PROCESSING
+    )
 
 
 @pytest.mark.parametrize(
@@ -154,12 +190,23 @@ def test_invalid_status_transition_is_rejected(
     initial_status,
     target_status,
 ):
-    run_repository.create(create_run(status=initial_status))
+    run_repository.create(
+        create_run(status=initial_status)
+    )
 
-    with pytest.raises(ValueError, match="Invalid workflow run transition"):
-        run_repository.update_status("run-123", target_status)
+    with pytest.raises(
+        ValueError,
+        match="Invalid workflow run transition",
+    ):
+        run_repository.update_status(
+            "run-123",
+            target_status,
+        )
 
-    assert run_repository.get_by_id("run-123").status == initial_status
+    assert (
+        run_repository.get_by_id("run-123").status
+        == initial_status
+    )
 
 
 def test_update_status_for_missing_run(run_repository):
@@ -169,3 +216,33 @@ def test_update_status_for_missing_run(run_repository):
     )
 
     assert updated is False
+
+
+def test_update_retry_metadata(run_repository):
+    run = WorkflowRun(
+        run_id="run-123",
+        workflow_id="workflow-123",
+        workflow_version=1,
+        event_id="event-123",
+        status=RunStatus.FAILED,
+        attempt=1,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    run_repository.create(run)
+
+    result = run_repository.update_retry_metadata(
+        run_id="run-123",
+        attempt=2,
+        last_error="Sentry API returned 503",
+    )
+
+    assert result is True
+
+    updated_run = run_repository.collection.find_one(
+        {"run_id": "run-123"}
+    )
+
+    assert updated_run["attempt"] == 2
+    assert updated_run["last_error"] == "Sentry API returned 503"

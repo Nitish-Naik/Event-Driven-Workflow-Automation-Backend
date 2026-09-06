@@ -7,10 +7,14 @@ from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
 from app.schemas.run import RunStatus, WorkflowRun
 from app.services.workflow import WorkflowService
+from app.queue.retry_queue import RetryQueue
+
+from app.services.retry import ( is_retryable_error, calculate_retry_delay )
 
 
 class EventWorker:
     QUEUE_NAME = "sentry:events"
+    MAX_ATTEMPTS = 3
 
     def __init__(
         self,
@@ -19,6 +23,7 @@ class EventWorker:
         run_repository=None,
         workflow_service=None,
         workflow_executor=None,
+        retry_queue=None,
     ):
         self.redis = redis_client if redis_client is not None else get_redis()
         self.event_repository = (
@@ -37,6 +42,8 @@ class EventWorker:
             else WorkflowService()
         )
         self.workflow_executor = workflow_executor
+
+        self.retry_queue = retry_queue if retry_queue is not None else RetryQueue(self.redis)
 
     def process_next(self) -> bool:
         item = self.redis.lpop(self.QUEUE_NAME)
@@ -79,9 +86,140 @@ class EventWorker:
 
         try:
             self.workflow_executor.execute(workflow, event)
-        except Exception:
-            self.run_repository.update_status(run.run_id, RunStatus.FAILED)
+        except Exception as exc:
+            self.run_repository.update_status(
+                run.run_id,
+                RunStatus.FAILED,
+            )
+
+            if not is_retryable_error(exc):
+                return True
+
+            if run.attempt >= self.MAX_ATTEMPTS:
+                self.run_repository.update_status(
+                    run.run_id,
+                    RunStatus.DEAD_LETTER,
+                )
+                return True
+
+            next_attempt = run.attempt + 1
+
+            delay = calculate_retry_delay(
+                next_attempt,
+            )
+
+            self.run_repository.update_retry_metadata(
+                run_id=run.run_id,
+                attempt=next_attempt,
+                last_error=str(exc),
+            )
+
+            self.run_repository.update_status(
+                run.run_id,
+                RunStatus.RETRYING,
+            )
+
+            self.retry_queue.schedule(
+                event_id=event.event_id,
+                run_id=run.run_id,
+                attempt=next_attempt,
+                delay=delay,
+            )
+
             return True
 
-        self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
+        self.run_repository.update_status(
+            run.run_id,
+            RunStatus.COMPLETED,
+        )
+
         return True
+
+    def process_retry_next(self) -> bool:
+        retry = self.retry_queue.pop_due()
+
+        if retry is None:
+            return False
+
+        event_id = retry["event_id"]
+        run_id = retry["run_id"]
+
+        event = self.event_repository.get_by_id(event_id)
+
+        if event is None:
+            return False
+
+        run = self.run_repository.get_by_id(run_id)
+
+        if run is None:
+            return False
+
+        workflow = self.workflow_service.get_workflow(
+            run.workflow_id,
+            run.workflow_version,
+        )
+
+        if workflow is None:
+            return False
+
+        self.run_repository.update_status(
+            run.run_id,
+            RunStatus.PROCESSING,
+        )
+
+        if self.workflow_executor is None:
+            return True
+
+        try:
+            self.workflow_executor.execute(workflow, event)
+
+        except Exception as exc:
+            self.run_repository.update_status(
+                run.run_id,
+                RunStatus.FAILED,
+            )
+
+            if not is_retryable_error(exc):
+                return True
+
+            if run.attempt >= self.MAX_ATTEMPTS:
+                self.run_repository.update_status(
+                    run.run_id,
+                    RunStatus.DEAD_LETTER,
+                )
+                return True
+
+            next_attempt = run.attempt + 1
+
+            delay = calculate_retry_delay(
+                next_attempt,
+            )
+
+            self.run_repository.update_retry_metadata(
+                run_id=run.run_id,
+                attempt=next_attempt,
+                last_error=str(exc),
+            )
+
+            self.run_repository.update_status(
+                run.run_id,
+                RunStatus.RETRYING,
+            )
+
+            self.retry_queue.schedule(
+                event_id=event.event_id,
+                run_id=run.run_id,
+                attempt=next_attempt,
+                delay=delay,
+            )
+
+            return True
+
+        self.run_repository.update_status(
+            run.run_id,
+            RunStatus.COMPLETED,
+        )
+
+        return True
+
+
