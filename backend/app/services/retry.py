@@ -1,11 +1,13 @@
 import random
 
+from app.execution.types import RetryableWorkflowExecutionError, WorkflowExecutionError
 
-class RetryableExecutionError(Exception):
+
+class RetryableExecutionError(RetryableWorkflowExecutionError):
     """Raised when an execution failure may succeed on a later attempt."""
 
 
-class PermanentExecutionError(Exception):
+class PermanentExecutionError(WorkflowExecutionError):
     """Raised when an execution failure should not be retried."""
 
 
