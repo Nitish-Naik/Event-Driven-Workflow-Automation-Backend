@@ -33,31 +33,37 @@ def resolve_node_input(
 
     return node_output[field]
 
+
 def resolve_input_value(
     context: ExecutionContext,
     value: Any,
 ) -> Any:
-    """Resolve a literal value or a node-output reference."""
+    """Resolve literals and node-output references recursively."""
 
-    if not isinstance(value, dict) or "$ref" not in value:
-        return value
+    if isinstance(value, dict):
+        if "$ref" in value:
+            reference = value["$ref"]
 
-    reference = value["$ref"]
+            if not isinstance(reference, str) or "." not in reference:
+                raise InputResolutionError(
+                    "Invalid node input reference"
+                )
 
-    if not isinstance(reference, str) or "." not in reference:
-        raise InputResolutionError(
-            "Invalid node input reference"
-        )
+            node_id, field = reference.split(".", 1)
 
-    node_id, field = reference.split(".", 1)
+            if not node_id or not field:
+                raise InputResolutionError(
+                    "Invalid node input reference"
+                )
 
-    if not node_id or not field:
-        raise InputResolutionError(
-            "Invalid node input reference"
-        )
+            return resolve_node_input(context, node_id, field)
 
-    return resolve_node_input(
-        context,
-        node_id,
-        field,
-    )
+        return {
+            key: resolve_input_value(context, item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [resolve_input_value(context, item) for item in value]
+
+    return value
