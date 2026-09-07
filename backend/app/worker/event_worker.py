@@ -64,9 +64,9 @@ class EventWorker:
                     workflow=workflow,
                     event=event,
                 )
-                self.workflow_executor.execute(context)
+                result = self.workflow_executor.execute(context)
             else:
-                self.workflow_executor.execute(workflow, event)
+                result = self.workflow_executor.execute(workflow, event)
         except Exception as exc:
             self.run_repository.update_status(
                 run.run_id,
@@ -103,6 +103,11 @@ class EventWorker:
             )
             return True
 
+        outputs = getattr(result, "outputs", {})
+        self.run_repository.update_outputs(
+            run.run_id,
+            outputs,
+        )
         self.run_repository.update_status(
             run.run_id,
             RunStatus.COMPLETED,
