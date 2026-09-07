@@ -120,8 +120,16 @@ class EventWorker:
         if retry is None:
             return False
 
-        event_id = retry["event_id"]
-        run_id = retry["run_id"]
+        if not isinstance(retry, dict):
+            return False
+
+        event_id = retry.get("event_id")
+        run_id = retry.get("run_id")
+        attempt = retry.get("attempt")
+
+        if not event_id or not run_id or not isinstance(attempt, int) or attempt < 1:
+            return False
+
         event = self.event_repository.get_by_id(event_id)
         if event is None:
             return False
