@@ -13,7 +13,7 @@ class PermanentExecutionError(WorkflowExecutionError):
 
 def is_retryable_error(error: Exception) -> bool:
     """Return whether an execution error is safe to retry."""
-    return isinstance(error, RetryableExecutionError)
+    return isinstance(error, RetryableWorkflowExecutionError)
 
 
 def calculate_retry_delay(
