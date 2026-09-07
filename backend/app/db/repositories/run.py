@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from pymongo import ASCENDING
 
@@ -17,11 +18,7 @@ class WorkflowRunRepository:
     }
 
     def __init__(self, database=None):
-        self.database = (
-            database
-            if database is not None
-            else get_database()
-        )
+        self.database = database if database is not None else get_database()
         self.collection = self.database["workflow_runs"]
 
     def create(self, run: WorkflowRun) -> str:
@@ -30,24 +27,14 @@ class WorkflowRunRepository:
         return str(result.inserted_id)
 
     def get_by_id(self, run_id: str) -> WorkflowRun | None:
-        document = self.collection.find_one(
-            {"run_id": run_id}
-        )
-
+        document = self.collection.find_one({"run_id": run_id})
         if document is None:
             return None
-
         document.pop("_id", None)
-
         return WorkflowRun(**document)
 
-    def update_status(
-        self,
-        run_id: str,
-        status: RunStatus,
-    ) -> bool:
+    def update_status(self, run_id: str, status: RunStatus) -> bool:
         current = self.get_by_id(run_id)
-
         if current is None:
             return False
 
@@ -67,7 +54,6 @@ class WorkflowRunRepository:
                 }
             },
         )
-
         return result.modified_count == 1
 
     def create_indexes(self):
@@ -93,14 +79,16 @@ class WorkflowRunRepository:
                 }
             },
         )
-
         return result.modified_count == 1
 
-    def get_by_id(self, run_id: str) -> WorkflowRun | None:
-        document = self.collection.find_one({"run_id": run_id})
-
-        if document is None:
-            return None
-
-        document.pop("_id", None)
-        return WorkflowRun(**document)
+    def update_outputs(self, run_id: str, outputs: dict[str, Any]) -> bool:
+        result = self.collection.update_one(
+            {"run_id": run_id},
+            {
+                "$set": {
+                    "outputs": outputs,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        return result.modified_count == 1
