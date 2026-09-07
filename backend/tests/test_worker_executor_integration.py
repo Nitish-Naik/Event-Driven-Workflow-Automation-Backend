@@ -2,8 +2,8 @@ import json
 from datetime import datetime, timezone
 
 from app.execution.contracts import ExecutionContext
+from app.execution.defaults import create_default_registry
 from app.execution.executor import WorkflowNodeExecutor
-from app.execution.registry import NodeRegistry
 from app.schemas.event import Event
 from app.schemas.run import RunStatus
 from app.schemas.workflow import Workflow
@@ -149,7 +149,8 @@ def test_worker_retries_real_executor_and_completes_same_run():
             raise RetryableExecutionError("Sentry API unavailable")
         return {"processed": True}
 
-    registry = NodeRegistry({"processor": processor_handler})
+    registry = create_default_registry()
+    registry.register("processor", processor_handler)
     executor = WorkflowNodeExecutor(registry=registry)
     worker = EventWorker(
         redis_client=redis,
