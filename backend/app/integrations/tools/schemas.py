@@ -5,3 +5,6 @@ class GetIssueInput(BaseModel):
 
 class GetIssueEventsInput(BaseModel):
     issue_id: str
+
+class ResolveIssueInput(BaseModel):
+    issue_id: str

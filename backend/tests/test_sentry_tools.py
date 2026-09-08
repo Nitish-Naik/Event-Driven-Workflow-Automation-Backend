@@ -253,3 +253,62 @@ async def test_get_issue_events_tool_does_not_call_client_when_input_is_invalid(
         await tool.execute({})
 
     assert client.called is False
+
+@pytest.mark.asyncio
+async def test_resolve_issue_tool_delegates_to_client():
+    class FakeSentryClient:
+        def __init__(self):
+            self.issue_id = None
+
+        async def resolve_issue(self, issue_id: str):
+            self.issue_id = issue_id
+            return {
+                "id": issue_id,
+                "status": "resolved",
+            }
+
+    client = FakeSentryClient()
+    tool = ResolveIssueTool(client)
+
+    result = await tool.execute({"issue_id": "123"})
+
+    assert client.issue_id == "123"
+    assert result == {
+        "id": "123",
+        "status": "resolved",
+    }
+
+@pytest.mark.asyncio
+async def test_resolve_issue_tool_rejects_missing_issue_id():
+    tool = ResolveIssueTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+@pytest.mark.asyncio
+async def test_resolve_issue_tool_rejects_none_issue_id():
+    tool = ResolveIssueTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({"issue_id": None})
+
+@pytest.mark.asyncio
+async def test_resolve_issue_tool_does_not_call_client_when_input_is_invalid():
+    class FakeSentryClient:
+        def __init__(self):
+            self.called = False
+
+        async def resolve_issue(self, issue_id: str):
+            self.called = True
+            return {
+                "id": issue_id,
+                "status": "resolved",
+            }
+
+    client = FakeSentryClient()
+    tool = ResolveIssueTool(client)
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+    assert client.called is False
