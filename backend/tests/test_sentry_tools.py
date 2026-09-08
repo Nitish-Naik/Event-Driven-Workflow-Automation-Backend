@@ -121,3 +121,61 @@ async def test_resolve_issue_tool_delegates_to_client():
         "id": "123",
         "status": "resolved",
     }
+
+def test_list_issues_tool_input_schema():
+    tool = ListIssuesTool(FakeSentryClient())
+
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {
+            "organization": {
+                "type": "string",
+                "description": "Sentry organization slug.",
+            },
+        },
+        "required": ["organization"],
+    }
+
+def test_get_issue_tool_input_schema():
+    tool = GetIssueTool(FakeSentryClient())
+
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {
+            "issue_id": {
+                "type": "string",
+                "description": "Sentry issue ID.",
+            },
+        },
+        "required": ["issue_id"],
+    }
+
+
+def test_get_issue_events_tool_input_schema():
+    tool = GetIssueEventsTool(FakeSentryClient())
+
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {
+            "issue_id": {
+                "type": "string",
+                "description": "Sentry issue ID.",
+            },
+        },
+        "required": ["issue_id"],
+    }
+
+
+def test_resolve_issue_tool_input_schema():
+    tool = ResolveIssueTool(FakeSentryClient())
+
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {
+            "issue_id": {
+                "type": "string",
+                "description": "Sentry issue ID.",
+            },
+        },
+        "required": ["issue_id"],
+    }

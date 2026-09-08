@@ -15,6 +15,19 @@ class ListIssuesTool(IntegrationTool):
     def description(self) -> str:
         return "List issues from a Sentry organization."
 
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "organization": {
+                    "type": "string",
+                    "description": "Sentry organization slug.",
+                },
+            },
+            "required": ["organization"],
+        }
+
     async def execute(self, inputs: dict[str, Any]) -> Any:
         organization = inputs["organization"]
         return await self.client.list_issues(organization)
@@ -31,6 +44,19 @@ class GetIssueTool(IntegrationTool):
     def description(self) -> str:
         return "Get details for a Sentry issue."
 
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "issue_id": {
+                    "type": "string",
+                    "description": "Sentry issue ID.",
+                },
+            },
+            "required": ["issue_id"],
+        }
+
     async def execute(self, inputs: dict[str, Any]) -> Any:
         issue_id = inputs["issue_id"]
         return await self.client.get_issue(issue_id)
@@ -46,6 +72,19 @@ class GetIssueEventsTool(IntegrationTool):
     @property
     def description(self) -> str:
         return "Get events for a Sentry issue."
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "issue_id": {
+                    "type": "string",
+                    "description": "Sentry issue ID.",
+                },
+            },
+            "required": ["issue_id"],
+        }
 
     async def execute(self, inputs: dict[str, Any]) -> Any:
         issue_id = inputs["issue_id"]
@@ -64,6 +103,19 @@ class ResolveIssueTool(IntegrationTool):
     def description(self) -> str:
         return "Resolve a Sentry issue."
 
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "issue_id": {
+                    "type": "string",
+                    "description": "Sentry issue ID.",
+                },
+            },
+            "required": ["issue_id"],
+        }
+    
     async def execute(self, inputs: dict[str, Any]) -> Any:
         issue_id = inputs["issue_id"]
         return await self.client.resolve_issue(issue_id)

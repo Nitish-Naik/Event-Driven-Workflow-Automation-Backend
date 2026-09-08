@@ -13,6 +13,17 @@ class IntegrationTool(ABC):
     def description(self) -> str:
         ...
 
+    @property
     @abstractmethod
-    async def execute(self, inputs: dict[str, Any]) -> Any:
+    def execute(self, inputs: dict[str, Any]) -> Any:
+        ...
+
+    @property
+    @abstractmethod
+    def input_schema(self) -> dict[str, Any]:
+        ...
+
+    @property
+    @abstractmethod
+    async def execute(self, inputs : dict[str, Any]) -> Any:
         ...
