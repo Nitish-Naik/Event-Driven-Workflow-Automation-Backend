@@ -73,6 +73,39 @@ async def test_list_projects_uses_bearer_auth_and_expected_endpoint(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_list_issues_uses_expected_endpoint_and_returns_json(monkeypatch):
+    response = FakeResponse([{"id": "issue-1", "title": "Something broke"}])
+    client_instance = FakeAsyncClient(response)
+
+    def fake_async_client(*, timeout):
+        assert timeout == 5.0
+        return client_instance
+
+    monkeypatch.setattr(httpx, "AsyncClient", fake_async_client)
+
+    client = SentryClient(
+        base_url="https://sentry.test/",
+        auth_token="secret-token",
+        timeout=5.0,
+    )
+
+    result = await client.list_issues("my-org")
+
+    assert result == [{"id": "issue-1", "title": "Something broke"}]
+    assert response.raise_for_status_called is True
+    assert client_instance.calls == [
+        (
+            "https://sentry.test/api/0/organizations/my-org/issues/",
+            {
+                "Accept": "application/json",
+                "Authorization": "Bearer secret-token",
+            },
+            None,
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_client_omits_authorization_header_without_token(monkeypatch):
     response = FakeResponse([])
     client_instance = FakeAsyncClient(response)
