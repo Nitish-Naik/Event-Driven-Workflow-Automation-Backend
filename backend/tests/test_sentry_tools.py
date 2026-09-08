@@ -179,3 +179,41 @@ def test_resolve_issue_tool_input_schema():
         },
         "required": ["issue_id"],
     }
+
+@pytest.mark.asyncio
+async def test_get_issue_tool_rejects_missing_issue_id():
+    from app.integrations.tools.validation import ToolInputValidationError
+
+    tool = GetIssueTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+@pytest.mark.asyncio
+async def test_get_issue_tool_rejects_none_issue_id():
+    from app.integrations.tools.validation import ToolInputValidationError
+
+    tool = GetIssueTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({"issue_id": None})
+
+@pytest.mark.asyncio
+async def test_get_issue_tool_does_not_call_client_when_input_is_invalid():
+    from app.integrations.tools.validation import ToolInputValidationError
+
+    class FakeSentryClient:
+        def __init__(self):
+            self.called = False
+
+        async def get_issue(self, issue_id: str):
+            self.called = True
+            return {"id": issue_id}
+
+    client = FakeSentryClient()
+    tool = GetIssueTool(client)
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+    assert client.called is False
