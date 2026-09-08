@@ -35,3 +35,6 @@ class SentryClient:
 
     async def list_projects(self, organization: str) -> Any:
         return await self._get(f"/api/0/organizations/{organization}/projects/")
+
+    async def list_issues(self, organization: str) -> Any:
+        return await self._get(f"/api/0/organizations/{organization}/issues/")
