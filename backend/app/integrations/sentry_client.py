@@ -33,6 +33,15 @@ class SentryClient:
             response.raise_for_status()
             return response.json()
 
+    async def _put(self, path: str,  json: dict[str, Any] | None = None) -> Any:
+        url = f"{self.base_url}{path}"
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.put(url, headers=self._headers(), json=json)
+
+            response.raise_for_status()
+            return response.json()
+        
     async def list_projects(self, organization: str) -> Any:
         return await self._get(f"/api/0/organizations/{organization}/projects/")
 
@@ -41,3 +50,14 @@ class SentryClient:
 
     async def get_issue(self, issue_id: str) -> Any:
         return await self._get(f"/api/0/issues/{issue_id}/")
+
+    async def get_issue_events(self, issue_id: str) -> Any:
+        return await self._get(
+            f"/api/0/issues/{issue_id}/events/"
+        )
+
+    async def resolve_issue(self, issue_id: str) -> Any:
+        return await self._put(
+            f"/api/0/issues/{issue_id}/",
+            json={"status": "resolved"},
+        )
