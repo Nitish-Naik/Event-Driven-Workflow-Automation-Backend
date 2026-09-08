@@ -2,7 +2,6 @@ import pytest
 
 from app.integrations.tools.sentry import ListIssuesTool, GetIssueTool, GetIssueEventsTool, ResolveIssueTool
 
-
 class FakeSentryClient:
     async def list_issues(self, organization: str):
         return [
@@ -212,6 +211,43 @@ async def test_get_issue_tool_does_not_call_client_when_input_is_invalid():
 
     client = FakeSentryClient()
     tool = GetIssueTool(client)
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+    assert client.called is False
+
+
+
+from app.integrations.tools.validation import ToolInputValidationError
+
+@pytest.mark.asyncio
+async def test_get_issue_events_tool_rejects_missing_issue_id():
+
+    tool = GetIssueEventsTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+@pytest.mark.asyncio
+async def test_get_issue_events_tool_rejects_none_issue_id():
+    tool = GetIssueEventsTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({"issue_id": None})
+
+@pytest.mark.asyncio
+async def test_get_issue_events_tool_does_not_call_client_when_input_is_invalid():
+    class FakeSentryClient:
+        def __init__(self):
+            self.called = False
+
+        async def get_issue_events(self, issue_id: str):
+            self.called = True
+            return [{"event_id": "event-1"}]
+
+    client = FakeSentryClient()
+    tool = GetIssueEventsTool(client)
 
     with pytest.raises(ToolInputValidationError):
         await tool.execute({})
