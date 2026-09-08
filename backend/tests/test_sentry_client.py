@@ -140,3 +140,37 @@ async def test_client_propagates_http_errors(monkeypatch):
         await client.list_projects("my-org")
 
     assert response.raise_for_status_called is True
+
+@pytest.mark.asyncio
+async def test_get_issue_uses_expected_endpoint(monkeypatch):
+    response = FakeResponse({"id": "123", "title": "Database error"})
+    client_instance = FakeAsyncClient(response)
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *, timeout: client_instance,
+    )
+
+    client = SentryClient(
+        base_url="https://sentry.test",
+        auth_token="secret-token",
+    )
+
+    result = await client.get_issue("123")
+
+    assert result == {
+        "id": "123",
+        "title": "Database error",
+    }
+
+    assert client_instance.calls == [
+        (
+            "https://sentry.test/api/0/issues/123/",
+            {
+                "Accept": "application/json",
+                "Authorization": "Bearer secret-token",
+            },
+            None,
+        )
+    ]
