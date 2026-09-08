@@ -50,3 +50,20 @@ class GetIssueEventsTool(IntegrationTool):
     async def execute(self, inputs: dict[str, Any]) -> Any:
         issue_id = inputs["issue_id"]
         return await self.client.get_issue_events(issue_id)
+
+
+class ResolveIssueTool(IntegrationTool):
+    def __init__(self, client: SentryClient) -> None:
+            self.client = client
+    
+    @property
+    def name(self) -> str:
+        return "sentry.resolve_issue"
+
+    @property
+    def description(self) -> str:
+        return "Resolve a Sentry issue."
+
+    async def execute(self, inputs: dict[str, Any]) -> Any:
+        issue_id = inputs["issue_id"]
+        return await self.client.resolve_issue(issue_id)

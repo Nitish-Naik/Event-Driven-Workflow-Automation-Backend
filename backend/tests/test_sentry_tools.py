@@ -1,6 +1,6 @@
 import pytest
 
-from app.integrations.tools.sentry import ListIssuesTool, GetIssueTool, GetIssueEventsTool
+from app.integrations.tools.sentry import ListIssuesTool, GetIssueTool, GetIssueEventsTool, ResolveIssueTool
 
 
 class FakeSentryClient:
@@ -97,3 +97,27 @@ async def test_get_issue_events_tool_delegates_to_client():
         {"event_id": "event-1"},
         {"event_id": "event-2"},
     ]
+
+@pytest.mark.asyncio
+async def test_resolve_issue_tool_delegates_to_client():
+    class FakeSentryClient:
+        def __init__(self):
+            self.issue_id = None
+
+        async def resolve_issue(self, issue_id: str):
+            self.issue_id = issue_id
+            return {
+                "id": issue_id,
+                "status": "resolved",
+            }
+
+    client = FakeSentryClient()
+    tool = ResolveIssueTool(client)
+
+    result = await tool.execute({"issue_id": "123"})
+
+    assert client.issue_id == "123"
+    assert result == {
+        "id": "123",
+        "status": "resolved",
+    }
