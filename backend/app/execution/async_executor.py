@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
-from app.execution.graph import validate_acyclic
+from app.execution.graph import WorkflowGraph
+from app.execution.inputs import InputResolutionError, resolve_input_value
 from app.execution.registry import NodeRegistry
-from app.execution.types import InputResolutionError, WorkflowExecutionError
+from app.execution.types import WorkflowExecutionError
 
 
 class AsyncWorkflowNodeExecutor:
@@ -15,71 +16,67 @@ class AsyncWorkflowNodeExecutor:
         self.registry = registry
 
     async def execute(self, context: ExecutionContext) -> ExecutionResult:
-        workflow = context.workflow
-        validate_acyclic(workflow.nodes, workflow.edges)
+        graph = WorkflowGraph(context.workflow)
+        try:
+            graph.validate_acyclic()
+        except ValueError as exc:
+            raise WorkflowExecutionError(str(exc)) from exc
 
-        nodes_by_id = {node.id: node for node in workflow.nodes}
-        incoming = {node.id: 0 for node in workflow.nodes}
-        for edge in workflow.edges:
-            incoming[edge.target] += 1
-
+        executed: set[str] = set()
         outputs: dict[str, Any] = {}
-        visiting: set[str] = set()
-        visited: set[str] = set()
 
         async def visit(node_id: str) -> None:
-            if node_id in visited:
+            if node_id in executed:
                 return
-            if node_id in visiting:
+
+            node = graph.get_node(node_id)
+            if node is None:
                 raise WorkflowExecutionError(
-                    f"Cycle detected while executing node '{node_id}'"
+                    f"Workflow node '{node_id}' does not exist"
                 )
 
-            visiting.add(node_id)
-            node = nodes_by_id[node_id]
-            inputs = self._resolve_inputs(node.config.get("inputs", {}), context.values)
+            node_inputs: dict[str, Any] = {}
+            if isinstance(node.config, dict):
+                configured_inputs = node.config.get("inputs", {})
+                if isinstance(configured_inputs, dict):
+                    try:
+                        node_inputs = {
+                            name: resolve_input_value(context, value)
+                            for name, value in configured_inputs.items()
+                        }
+                    except InputResolutionError as exc:
+                        raise WorkflowExecutionError(
+                            f"Failed to resolve inputs for node '{node.id}': {exc}"
+                        ) from exc
 
             try:
                 result = await self.registry.execute_async(
                     node.type,
                     context,
                     node.config,
-                    inputs,
+                    node_inputs,
                 )
-            except (WorkflowExecutionError, InputResolutionError):
+            except WorkflowExecutionError:
                 raise
             except Exception as exc:
                 raise WorkflowExecutionError(
-                    f"Node '{node_id}' ({node.type}) failed: {exc}"
+                    f"Node '{node.id}' ({node.type}) failed during execution"
                 ) from exc
 
-            context.values[node_id] = result
-            outputs[node_id] = result
-            visiting.remove(node_id)
-            visited.add(node_id)
+            if result is None:
+                result = {}
 
-            for edge in workflow.edges:
-                if edge.source == node_id:
-                    await visit(edge.target)
+            context.values[node.id] = result
+            outputs[node.id] = result
+            executed.add(node.id)
 
-        for node_id, count in incoming.items():
-            if count == 0:
-                await visit(node_id)
+            for child_id in graph.get_children(node.id):
+                await visit(child_id)
+
+        for start_node in graph.get_start_nodes():
+            await visit(start_node.id)
 
         return ExecutionResult(outputs=outputs)
 
-    @staticmethod
-    def _resolve_inputs(value: Any, values: dict[str, Any]) -> Any:
-        if isinstance(value, str) and value.startswith("$"):
-            ref = value[1:]
-            if ref not in values:
-                raise InputResolutionError(f"Unknown input reference '{ref}'")
-            return values[ref]
-        if isinstance(value, dict):
-            return {
-                key: AsyncWorkflowNodeExecutor._resolve_inputs(item, values)
-                for key, item in value.items()
-            }
-        if isinstance(value, list):
-            return [AsyncWorkflowNodeExecutor._resolve_inputs(item, values) for item in value]
-        return value
+
+__all__ = ["AsyncWorkflowNodeExecutor"]
