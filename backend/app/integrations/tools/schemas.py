@@ -8,3 +8,6 @@ class GetIssueEventsInput(BaseModel):
 
 class ResolveIssueInput(BaseModel):
     issue_id: str
+
+class ListIssuesInput(BaseModel):
+    organization: str

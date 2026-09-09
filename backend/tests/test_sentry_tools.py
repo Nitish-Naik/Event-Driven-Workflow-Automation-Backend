@@ -312,3 +312,55 @@ async def test_resolve_issue_tool_does_not_call_client_when_input_is_invalid():
         await tool.execute({})
 
     assert client.called is False
+
+
+
+@pytest.mark.asyncio
+async def test_list_issues_tool_delegates_to_client():
+    class FakeSentryClient:
+        def __init__(self):
+            self.organization = None
+
+        async def list_issues(self, organization: str):
+            self.organization = organization
+            return [{"id": "123"}]
+
+    client = FakeSentryClient()
+    tool = ListIssuesTool(client)
+
+    result = await tool.execute({"organization": "my-org"})
+
+    assert client.organization == "my-org"
+    assert result == [{"id": "123"}]
+
+@pytest.mark.asyncio
+async def test_list_issues_tool_rejects_missing_organization():
+    tool = ListIssuesTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+@pytest.mark.asyncio
+async def test_list_issues_tool_rejects_none_organization():
+    tool = ListIssuesTool(FakeSentryClient())
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({"organization": None})
+
+@pytest.mark.asyncio
+async def test_list_issues_tool_does_not_call_client_when_input_is_invalid():
+    class FakeSentryClient:
+        def __init__(self):
+            self.called = False
+
+        async def list_issues(self, organization: str):
+            self.called = True
+            return [{"id": "123"}]
+
+    client = FakeSentryClient()
+    tool = ListIssuesTool(client)
+
+    with pytest.raises(ToolInputValidationError):
+        await tool.execute({})
+
+    assert client.called is False

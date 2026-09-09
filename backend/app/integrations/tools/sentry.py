@@ -3,7 +3,8 @@ from typing import Any
 from app.integrations.sentry_client import SentryClient
 from app.integrations.tools.base import IntegrationTool
 
-from app.integrations.tools.schemas import GetIssueInput, GetIssueEventsInput, ResolveIssueInput
+from app.integrations.tools.schemas import GetIssueInput, GetIssueEventsInput, ResolveIssueInput, ListIssuesInput
+
 from app.integrations.tools.validation import validate_tool_inputs
 
 class ListIssuesTool(IntegrationTool):
@@ -32,8 +33,8 @@ class ListIssuesTool(IntegrationTool):
         }
 
     async def execute(self, inputs: dict[str, Any]) -> Any:
-        organization = inputs["organization"]
-        return await self.client.list_issues(organization)
+        validated_inputs = validate_tool_inputs(ListIssuesInput, inputs)
+        return await self.client.list_issues(validated_inputs["organization"])
     
 class GetIssueTool(IntegrationTool):
     def __init__(self, client: SentryClient) -> None:
