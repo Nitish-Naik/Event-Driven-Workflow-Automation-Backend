@@ -61,6 +61,30 @@ def test_registry_executes_registered_handler():
     assert calls == [{"field": "message"}]
 
 
+@pytest.mark.asyncio
+async def test_registry_async_execution_supports_sync_handler():
+    def handler(context, config, inputs):
+        return {"value": inputs["value"] + 1}
+
+    registry = NodeRegistry({"sync": handler})
+
+    result = await registry.execute_async("sync", make_context(), {}, {"value": 4})
+
+    assert result == {"value": 5}
+
+
+@pytest.mark.asyncio
+async def test_registry_async_execution_awaits_async_handler():
+    async def handler(context, config, inputs):
+        return {"value": inputs["value"] + 1}
+
+    registry = NodeRegistry({"async": handler})
+
+    result = await registry.execute_async("async", make_context(), {}, {"value": 4})
+
+    assert result == {"value": 5}
+
+
 def test_registry_rejects_empty_node_type():
     with pytest.raises(ValueError, match="Node type must not be empty"):
         NodeRegistry().register("", lambda context, config: {})
