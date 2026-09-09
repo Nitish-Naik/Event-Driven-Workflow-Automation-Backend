@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+import inspect
 
 from app.execution.contracts import ExecutionContext
 from app.execution.types import NodeHandler, WorkflowExecutionError
@@ -27,14 +28,30 @@ class NodeRegistry:
         return dict(self._handlers)
 
     def execute(
-    self,
-    node_type: str,
-    context: ExecutionContext,
-    config: object,
-    inputs: dict | None = None,
+        self,
+        node_type: str,
+        context: ExecutionContext,
+        config: object,
+        inputs: dict | None = None,
     ) -> dict:
         return self.get(node_type)(
             context,
             config,
             inputs or {},
         )
+
+    async def execute_async(
+        self,
+        node_type: str,
+        context: ExecutionContext,
+        config: object,
+        inputs: dict | None = None,
+    ) -> dict:
+        result = self.get(node_type)(
+            context,
+            config,
+            inputs or {},
+        )
+        if inspect.isawaitable(result):
+            result = await result
+        return result
