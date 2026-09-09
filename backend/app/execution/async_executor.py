@@ -10,7 +10,7 @@ from app.execution.types import WorkflowExecutionError
 
 
 class AsyncWorkflowNodeExecutor:
-    """Executes workflow nodes while supporting sync and async handlers."""
+    """Executes workflow nodes while supporting synchronous and asynchronous handlers."""
 
     def __init__(self, registry: NodeRegistry) -> None:
         self.registry = registry
