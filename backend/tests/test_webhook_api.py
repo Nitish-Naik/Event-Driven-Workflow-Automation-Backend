@@ -1,3 +1,18 @@
+import hashlib
+import hmac
+import json
+
+from app.config import settings
+
+
+def make_signature(secret: str, payload: bytes) -> str:
+    return hmac.new(
+        secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def test_receive_sentry_event(api_client):
     payload = {
         "event_id": "sentry-event-1",
@@ -43,6 +58,7 @@ def test_duplicate_sentry_event_is_accepted(
 
     assert second_response.json()["status"] == "duplicate"
 
+
 def test_receive_sentry_event_queues_event(api_client, fake_event_queue):
     payload = {
         "event_id": "queued-event-1",
@@ -76,3 +92,36 @@ def test_duplicate_sentry_event_is_not_queued(
     assert fake_event_queue.events == [
         "duplicate-queue-event"
     ]
+
+
+def test_sentry_webhook_accepts_valid_signature(api_client, monkeypatch):
+    secret = "webhook-secret"
+    payload = {"event_id": "signed-event", "event_type": "issue.created"}
+    raw_body = json.dumps(payload, separators=(",", ":")).encode()
+
+    monkeypatch.setattr(settings, "sentry_webhook_secret", secret)
+
+    response = api_client.post(
+        "/webhooks/sentry",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "sentry-hook-signature": make_signature(secret, raw_body),
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+
+
+def test_sentry_webhook_rejects_invalid_signature(api_client, monkeypatch):
+    monkeypatch.setattr(settings, "sentry_webhook_secret", "webhook-secret")
+
+    response = api_client.post(
+        "/webhooks/sentry",
+        json={"event_id": "invalid-signature", "event_type": "issue.created"},
+        headers={"sentry-hook-signature": "invalid"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid Sentry webhook signature"
