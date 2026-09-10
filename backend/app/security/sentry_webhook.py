@@ -4,7 +4,7 @@ import hashlib
 import hmac
 
 
-SENTRY_SIGNATURE_HEADER = "sentry-hook-signature"
+SENTRY_SIGNATURE_HEADER = "x-servicehook-signature"
 
 
 def verify_sentry_signature(
