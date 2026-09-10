@@ -5,7 +5,7 @@ from typing import Any
 from app.execution.contracts import ExecutionContext, ExecutionResult
 from app.execution.graph import WorkflowGraph
 from app.execution.registry import NodeRegistry
-from app.execution.types import InputResolutionError, WorkflowExecutionError
+from app.execution.types import WorkflowExecutionError
 
 
 class AsyncWorkflowNodeExecutor:
@@ -32,8 +32,8 @@ class AsyncWorkflowNodeExecutor:
                     f"Cycle detected while executing node '{node_id}'"
                 )
 
-            visiting.add(node_id)
             node = nodes_by_id[node_id]
+            visiting.add(node_id)
             inputs = self._resolve_inputs(node.config.get("inputs", {}), context.values)
 
             try:
@@ -43,7 +43,7 @@ class AsyncWorkflowNodeExecutor:
                     node.config,
                     inputs,
                 )
-            except (WorkflowExecutionError, InputResolutionError):
+            except WorkflowExecutionError:
                 raise
             except Exception as exc:
                 raise WorkflowExecutionError(
@@ -68,7 +68,7 @@ class AsyncWorkflowNodeExecutor:
         if isinstance(value, str) and value.startswith("$"):
             ref = value[1:]
             if ref not in values:
-                raise InputResolutionError(f"Unknown input reference '{ref}'")
+                raise ValueError(f"Unknown input reference '{ref}'")
             return values[ref]
         if isinstance(value, dict):
             return {
