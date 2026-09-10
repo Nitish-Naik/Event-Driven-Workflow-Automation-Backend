@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.execution.contracts import ExecutionContext, ExecutionResult
-from app.execution.graph import validate_acyclic
+from app.execution.graph import WorkflowGraph
 from app.execution.registry import NodeRegistry
 from app.execution.types import InputResolutionError, WorkflowExecutionError
 
@@ -16,13 +16,10 @@ class AsyncWorkflowNodeExecutor:
 
     async def execute(self, context: ExecutionContext) -> ExecutionResult:
         workflow = context.workflow
-        validate_acyclic(workflow.nodes, workflow.edges)
+        graph = WorkflowGraph(workflow)
+        graph.validate_acyclic()
 
         nodes_by_id = {node.id: node for node in workflow.nodes}
-        incoming = {node.id: 0 for node in workflow.nodes}
-        for edge in workflow.edges:
-            incoming[edge.target] += 1
-
         outputs: dict[str, Any] = {}
         visiting: set[str] = set()
         visited: set[str] = set()
@@ -58,13 +55,11 @@ class AsyncWorkflowNodeExecutor:
             visiting.remove(node_id)
             visited.add(node_id)
 
-            for edge in workflow.edges:
-                if edge.source == node_id:
-                    await visit(edge.target)
+            for child_id in graph.get_children(node_id):
+                await visit(child_id)
 
-        for node_id, count in incoming.items():
-            if count == 0:
-                await visit(node_id)
+        for node in graph.get_start_nodes():
+            await visit(node.id)
 
         return ExecutionResult(outputs=outputs)
 
