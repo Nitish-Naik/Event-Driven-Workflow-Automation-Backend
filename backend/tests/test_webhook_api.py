@@ -16,6 +16,25 @@ def make_signature(secret: str, payload: bytes) -> str:
     ).hexdigest()
 
 
+def make_sentry_payload(event_id: str) -> dict:
+    return {
+        "project": {
+            "id": "4512062696390656",
+            "slug": "python-fastapi",
+        },
+        "group": {
+            "id": "123",
+            "shortId": "PYTHON-FASTAPI-1",
+            "title": "Database connection failed",
+        },
+        "event": {
+            "id": event_id,
+            "eventID": event_id,
+            "projectID": "4512062696390656",
+        },
+    }
+
+
 def signed_request(api_client, payload: dict):
     raw_body = json.dumps(payload, separators=(",", ":")).encode()
     return api_client.post(
@@ -33,26 +52,17 @@ def signed_request(api_client, payload: dict):
 
 def test_receive_sentry_event(api_client, monkeypatch):
     monkeypatch.setattr(settings, "sentry_webhook_secret", TEST_WEBHOOK_SECRET)
-    payload = {
-        "event_id": "sentry-event-1",
-        "event_type": "issue.created",
-        "issue_id": "123",
-        "message": "Database connection failed",
-    }
+    payload = make_sentry_payload("sentry-event-1")
     response = signed_request(api_client, payload)
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
-    assert body["event_id"]
+    assert body["event_id"] == "sentry-event-1"
 
 
 def test_duplicate_sentry_event_is_accepted(api_client, monkeypatch):
     monkeypatch.setattr(settings, "sentry_webhook_secret", TEST_WEBHOOK_SECRET)
-    payload = {
-        "event_id": "duplicate-event",
-        "event_type": "issue.created",
-        "issue_id": "123",
-    }
+    payload = make_sentry_payload("duplicate-event")
     first_response = signed_request(api_client, payload)
     second_response = signed_request(api_client, payload)
     assert first_response.status_code == 202
@@ -66,11 +76,7 @@ def test_receive_sentry_event_queues_event(
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "sentry_webhook_secret", TEST_WEBHOOK_SECRET)
-    payload = {
-        "event_id": "queued-event-1",
-        "event_type": "issue.created",
-        "issue_id": "123",
-    }
+    payload = make_sentry_payload("queued-event-1")
     response = signed_request(api_client, payload)
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
@@ -83,10 +89,7 @@ def test_duplicate_sentry_event_is_not_queued(
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "sentry_webhook_secret", TEST_WEBHOOK_SECRET)
-    payload = {
-        "event_id": "duplicate-queue-event",
-        "event_type": "issue.created",
-    }
+    payload = make_sentry_payload("duplicate-queue-event")
     first_response = signed_request(api_client, payload)
     second_response = signed_request(api_client, payload)
     assert first_response.status_code == 202
@@ -96,7 +99,7 @@ def test_duplicate_sentry_event_is_not_queued(
 
 def test_sentry_webhook_accepts_valid_signature(api_client, monkeypatch):
     secret = TEST_WEBHOOK_SECRET
-    payload = {"event_id": "signed-event", "event_type": "issue.created"}
+    payload = make_sentry_payload("signed-event")
     raw_body = json.dumps(payload, separators=(",", ":")).encode()
     monkeypatch.setattr(settings, "sentry_webhook_secret", secret)
     response = api_client.post(
