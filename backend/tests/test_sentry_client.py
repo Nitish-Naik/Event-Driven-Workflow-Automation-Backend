@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+from app.config import settings
 from app.integrations.sentry_client import SentryClient
 from app.integrations.sentry_errors import (
     SentryPermanentAPIError,
@@ -97,6 +98,7 @@ async def test_list_issues_uses_expected_endpoint(monkeypatch):
 async def test_client_omits_authorization_header_without_token(monkeypatch):
     fake_client = FakeAsyncClient(FakeResponse([]))
     patch_client(monkeypatch, fake_client)
+    monkeypatch.setattr(settings, "sentry_auth_token", "")
 
     client = SentryClient(base_url="https://sentry.test", auth_token=None)
     await client.list_projects("my-org")
