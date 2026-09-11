@@ -3,8 +3,8 @@ import pytest
 from app.ai.provider import AIAnalysis, FakeAIProvider
 from app.execution.ai_analysis import AIAnalysisNode
 from app.execution.contracts import ExecutionContext
-from app.schema.event import Event
-from app.schema.workflow import Workflow
+from app.schemas.event import Event
+from app.schemas.workflow import Workflow
 
 
 def make_context() -> ExecutionContext:
@@ -20,6 +20,7 @@ def make_context() -> ExecutionContext:
         source="sentry",
         event_type="issue",
         payload={"message": "PostgreSQL connection timeout", "level": "error"},
+        received_at=None,
     )
     return ExecutionContext(workflow=workflow, event=event)
 
