@@ -32,6 +32,13 @@ class WorkflowRunRepository:
         document.pop("_id", None)
         return WorkflowRun(**document)
 
+    def get_by_execution_key(self, execution_key: str) -> WorkflowRun | None:
+        document = self.collection.find_one({"execution_key": execution_key})
+        if document is None:
+            return None
+        document.pop("_id", None)
+        return WorkflowRun(**document)
+
     def list_all(self, limit: int = 100) -> list[WorkflowRun]:
         documents = self.collection.find({}, sort=[("created_at", -1)]).limit(limit)
         return [self._to_model(document) for document in documents]
@@ -62,7 +69,17 @@ class WorkflowRunRepository:
         return result.modified_count == 1
 
     def create_indexes(self):
-        self.collection.create_index([( "run_id", ASCENDING)], unique=True, name="run_id_unique")
+        self.collection.create_index(
+            [("run_id", ASCENDING)],
+            unique=True,
+            name="run_id_unique",
+        )
+        self.collection.create_index(
+            [("execution_key", ASCENDING)],
+            unique=True,
+            partialFilterExpression={"execution_key": {"$type": "string"}},
+            name="execution_key_unique",
+        )
 
     def update_retry_metadata(self, run_id: str, attempt: int, last_error: str) -> bool:
         result = self.collection.update_one(
