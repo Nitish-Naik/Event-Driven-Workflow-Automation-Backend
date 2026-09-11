@@ -10,6 +10,7 @@ from app.execution.async_registry import create_async_registry
 from app.execution.contracts import ExecutionContext
 from app.execution.defaults import create_default_registry
 from app.execution.executor import WorkflowNodeExecutor
+from app.queue.event_queue import QueuedEvent
 from app.schemas.run import RunStatus, WorkflowRun
 from app.services.workflow import WorkflowService
 from app.queue.retry_queue import RetryQueue
@@ -121,6 +122,31 @@ class EventWorker:
         self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
         return True
 
+    def _build_run(self, workflow, event) -> WorkflowRun:
+        now = datetime.now(timezone.utc)
+        return WorkflowRun(
+            run_id=str(uuid.uuid4()),
+            workflow_id=workflow.workflow_id,
+            workflow_version=workflow.version,
+            event_id=event.event_id,
+            status=RunStatus.QUEUED,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def process_reserved_async(self, queued_event: QueuedEvent) -> bool:
+        event = self.event_repository.get_by_id(queued_event.event_id)
+        if event is None:
+            return True
+
+        workflow = self.workflow_service.get_active_workflow_by_trigger(event.source)
+        if workflow is None:
+            return True
+
+        run = self._build_run(workflow, event)
+        self.run_repository.create(run)
+        return await self._execute_run_async(run, workflow, event)
+
     def process_next(self) -> bool:
         item = self.redis.lpop(self.QUEUE_NAME)
         if item is None:
@@ -146,16 +172,7 @@ class EventWorker:
         if workflow is None:
             return False
 
-        now = datetime.now(timezone.utc)
-        run = WorkflowRun(
-            run_id=str(uuid.uuid4()),
-            workflow_id=workflow.workflow_id,
-            workflow_version=workflow.version,
-            event_id=event.event_id,
-            status=RunStatus.QUEUED,
-            created_at=now,
-            updated_at=now,
-        )
+        run = self._build_run(workflow, event)
         self.run_repository.create(run)
         return self._execute_run(run, workflow, event)
 
@@ -184,16 +201,7 @@ class EventWorker:
         if workflow is None:
             return False
 
-        now = datetime.now(timezone.utc)
-        run = WorkflowRun(
-            run_id=str(uuid.uuid4()),
-            workflow_id=workflow.workflow_id,
-            workflow_version=workflow.version,
-            event_id=event.event_id,
-            status=RunStatus.QUEUED,
-            created_at=now,
-            updated_at=now,
-        )
+        run = self._build_run(workflow, event)
         self.run_repository.create(run)
         return await self._execute_run_async(run, workflow, event)
 
