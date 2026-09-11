@@ -141,6 +141,14 @@ class EventWorker:
             updated_at=now,
         )
 
+    def _create_run_idempotently(self, run: WorkflowRun) -> bool:
+        """Create a run once; duplicate execution keys are treated as duplicates."""
+        try:
+            self.run_repository.create(run)
+        except DuplicateKeyError:
+            return False
+        return True
+
     async def process_reserved_async(self, queued_event: QueuedEvent) -> bool:
         event = self.event_repository.get_by_id(queued_event.event_id)
         if event is None:
@@ -155,9 +163,7 @@ class EventWorker:
             return True
 
         run = self._build_run(workflow, event)
-        try:
-            self.run_repository.create(run)
-        except DuplicateKeyError:
+        if not self._create_run_idempotently(run):
             return True
 
         return await self._execute_run_async(run, workflow, event)
@@ -188,7 +194,8 @@ class EventWorker:
             return False
 
         run = self._build_run(workflow, event)
-        self.run_repository.create(run)
+        if not self._create_run_idempotently(run):
+            return True
         return self._execute_run(run, workflow, event)
 
     async def process_next_async(self) -> bool:
@@ -217,7 +224,8 @@ class EventWorker:
             return False
 
         run = self._build_run(workflow, event)
-        self.run_repository.create(run)
+        if not self._create_run_idempotently(run):
+            return True
         return await self._execute_run_async(run, workflow, event)
 
     def process_retry_next(self) -> bool:
