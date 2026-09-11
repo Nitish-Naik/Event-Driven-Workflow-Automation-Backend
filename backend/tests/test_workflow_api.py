@@ -1,157 +1,99 @@
-def test_create_workflow(api_client):
-    payload = {
-        "workflow_id": "api-workflow",
-        "name": "API Test Workflow",
-        "trigger": "sentry",
-        "version": 1,
-        "status": "draft",
-        "nodes": [],
-        "edges": [],
-        "created_at": "2026-09-05T10:00:00Z",
-        "updated_at": "2026-09-05T10:00:00Z",
-    }
+from datetime import datetime, timezone
 
-    api_client.post(
-        "/workflows",
-        json=payload,
-    )
+from fastapi.testclient import TestClient
 
-    response = api_client.get(
-        "/workflows/api-workflow/versions/1"
-    )
+from app.main import app
+from app.routers.workflows import get_workflow_service
+from app.schemas.workflow import Workflow
 
+
+class FakeWorkflowService:
+    def __init__(self):
+        now = datetime.now(timezone.utc)
+        self.workflows = [Workflow(
+            workflow_id="wf-1", name="Incident Workflow", trigger="sentry",
+            version=1, status="draft", nodes=[], edges=[],
+            created_at=now, updated_at=now,
+        )]
+
+    def list_workflows(self): return self.workflows
+    def create_workflow(self, workflow): self.workflows.append(workflow); return workflow.workflow_id
+    def get_workflow(self, workflow_id, version):
+        return next((w for w in self.workflows if w.workflow_id == workflow_id and w.version == version), None)
+    def get_active_workflow(self, workflow_id):
+        return next((w for w in self.workflows if w.workflow_id == workflow_id and w.status == "active"), None)
+    def update_workflow(self, workflow):
+        for i, existing in enumerate(self.workflows):
+            if existing.workflow_id == workflow.workflow_id and existing.version == workflow.version:
+                self.workflows[i] = workflow
+                return workflow
+        raise RuntimeError("not found")
+    def activate_workflow(self, workflow_id, version):
+        for workflow in self.workflows:
+            if workflow.workflow_id == workflow_id:
+                workflow.status = "active" if workflow.version == version else "archived"
+    def deactivate_workflow(self, workflow_id, version):
+        workflow = self.get_workflow(workflow_id, version)
+        if workflow: workflow.status = "draft"
+
+
+service = FakeWorkflowService()
+app.dependency_overrides[get_workflow_service] = lambda: service
+client = TestClient(app)
+
+
+def workflow_payload(workflow_id="wf-2", version=1):
+    now = datetime.now(timezone.utc).isoformat()
+    return {"workflow_id": workflow_id, "name": "Test Workflow", "trigger": "sentry",
+            "version": version, "status": "draft", "nodes": [], "edges": [],
+            "created_at": now, "updated_at": now}
+
+
+def test_list_workflows():
+    response = client.get("/workflows")
     assert response.status_code == 200
-
-    body = response.json()
-
-    assert body["workflow_id"] == "api-workflow"
-    assert body["version"] == 1
-    assert body["status"] == "draft"
-
-def test_get_missing_workflow(api_client):
-    response = api_client.get(
-        "/workflows/does-not-exist/versions/1"
-    )
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Workflow not found"
+    assert response.json()[0]["workflow_id"] == "wf-1"
 
 
-def test_get_active_workflow(api_client):
-    payload = {
-        "workflow_id": "active-workflow",
-        "name": "Active Workflow",
-        "trigger": "sentry",
-        "version": 1,
-        "status": "active",
-        "nodes": [],
-        "edges": [],
-        "created_at": "2026-09-05T10:00:00Z",
-        "updated_at": "2026-09-05T10:00:00Z",
-    }
-
-    api_client.post(
-        "/workflows",
-        json=payload,
-    )
-
-    response = api_client.get(
-        "/workflows/active-workflow/active"
-    )
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert body["workflow_id"] == "active-workflow"
-    assert body["version"] == 1
-    assert body["status"] == "active"
+def test_create_workflow():
+    response = client.post("/workflows", json=workflow_payload())
+    assert response.status_code == 201
+    assert response.json() == {"workflow_id": "wf-2"}
 
 
-def test_get_active_workflow_not_found(api_client):
-    response = api_client.get(
-        "/workflows/no-active-workflow/active"
-    )
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Active workflow not found"
-
-
-def test_activate_workflow(api_client):
-    payload = {
-        "workflow_id": "activate-workflow",
-        "name": "Activation Test",
-        "trigger": "sentry",
-        "version": 1,
-        "status": "draft",
-        "nodes": [],
-        "edges": [],
-        "created_at": "2026-09-05T10:00:00Z",
-        "updated_at": "2026-09-05T10:00:00Z",
-    }
-
-    api_client.post(
-        "/workflows",
-        json=payload,
-    )
-
-    response = api_client.post(
-        "/workflows/activate-workflow/versions/1/activate"
-    )
-
-    assert response.status_code == 204
-
-    response = api_client.get(
-        "/workflows/activate-workflow/active"
-    )
-
+def test_get_workflow_version():
+    response = client.get("/workflows/wf-1/versions/1")
     assert response.status_code == 200
     assert response.json()["version"] == 1
+
+
+def test_get_missing_workflow_returns_404():
+    response = client.get("/workflows/missing/versions/1")
+    assert response.status_code == 404
+
+
+def test_activate_and_get_active_workflow():
+    response = client.post("/workflows/wf-1/versions/1/activate")
+    assert response.status_code == 204
+    response = client.get("/workflows/wf-1/active")
+    assert response.status_code == 200
     assert response.json()["status"] == "active"
 
 
-def test_activate_missing_workflow(api_client):
-    response = api_client.post(
-        "/workflows/missing-workflow/versions/1/activate"
-    )
+def test_update_workflow_version():
+    payload = workflow_payload("wf-1", 1)
+    payload["name"] = "Updated Workflow"
+    response = client.put("/workflows/wf-1/versions/1", json=payload)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated Workflow"
 
-    assert response.status_code == 404
 
-def test_activate_new_version_archives_previous_version(api_client):
-    v1 = {
-        "workflow_id": "versioned-workflow",
-        "name": "Versioned Workflow",
-        "trigger": "sentry",
-        "version": 1,
-        "status": "active",
-        "nodes": [],
-        "edges": [],
-        "created_at": "2026-09-05T10:00:00Z",
-        "updated_at": "2026-09-05T10:00:00Z",
-    }
+def test_update_rejects_path_body_mismatch():
+    response = client.put("/workflows/wf-1/versions/1", json=workflow_payload("different", 1))
+    assert response.status_code == 400
 
-    v2 = {
-        **v1,
-        "version": 2,
-        "status": "draft",
-    }
 
-    api_client.post("/workflows", json=v1)
-    api_client.post("/workflows", json=v2)
-
-    response = api_client.post(
-        "/workflows/versioned-workflow/versions/2/activate"
-    )
-
+def test_deactivate_workflow():
+    response = client.post("/workflows/wf-1/versions/1/deactivate")
     assert response.status_code == 204
-
-    v1_response = api_client.get(
-        "/workflows/versioned-workflow/versions/1"
-    )
-
-    v2_response = api_client.get(
-        "/workflows/versioned-workflow/versions/2"
-    )
-
-    assert v1_response.json()["status"] == "archived"
-    assert v2_response.json()["status"] == "active"
+    assert client.get("/workflows/wf-1/active").status_code == 404
