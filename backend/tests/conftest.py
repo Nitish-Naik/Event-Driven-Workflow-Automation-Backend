@@ -6,16 +6,19 @@ from app.config import settings
 
 from app.db.repositories.workflow import WorkflowRepository
 from app.db.repositories.event import EventRepository
+from app.db.repositories.run import WorkflowRunRepository
 
 from app.main import app
 
-from app.routers.workflows import get_workflow_service
-from app.routers.webhooks import get_event_service
+from app.routers.workflow_api import get_workflow_service
+from app.routers.webhooks import get_event_service, get_event_queue
+from app.routers.observability import (
+    get_event_repository,
+    get_run_repository,
+)
 
 from app.services.workflow import WorkflowService
 from app.services.event import EventService
-
-from app.routers.webhooks import get_event_queue
 
 
 class FakeEventQueue:
@@ -24,6 +27,7 @@ class FakeEventQueue:
 
     def enqueue(self, event_id: str):
         self.events.append(event_id)
+
 
 @pytest.fixture
 def repository():
@@ -40,6 +44,7 @@ def repository():
     database.drop_collection("workflows")
     client.close()
 
+
 @pytest.fixture
 def api_client(fake_event_queue):
     client = MongoClient(settings.mongodb_uri)
@@ -47,20 +52,43 @@ def api_client(fake_event_queue):
 
     database.drop_collection("workflows")
     database.drop_collection("events")
+    database.drop_collection("workflow_runs")
 
-    repository = WorkflowRepository(database=database)
+    workflow_repository = WorkflowRepository(database=database)
     event_repository = EventRepository(database=database)
+    run_repository = WorkflowRunRepository(database=database)
 
-    repository.create_indexes()
+    workflow_repository.create_indexes()
     event_repository.create_indexes()
+    run_repository.create_indexes()
 
-    workflow_service = WorkflowService(repository=repository)
-    event_service = EventService(repository=event_repository)
-    event_queue = FakeEventQueue()
+    workflow_service = WorkflowService(
+        repository=workflow_repository
+    )
 
-    app.dependency_overrides[get_workflow_service] = lambda: workflow_service
-    app.dependency_overrides[get_event_service] = lambda: event_service
-    app.dependency_overrides[get_event_queue] = lambda: fake_event_queue
+    event_service = EventService(
+        repository=event_repository
+    )
+
+    app.dependency_overrides[get_workflow_service] = (
+        lambda: workflow_service
+    )
+
+    app.dependency_overrides[get_event_service] = (
+        lambda: event_service
+    )
+
+    app.dependency_overrides[get_event_queue] = (
+        lambda: fake_event_queue
+    )
+
+    app.dependency_overrides[get_event_repository] = (
+        lambda: event_repository
+    )
+
+    app.dependency_overrides[get_run_repository] = (
+        lambda: run_repository
+    )
 
     with TestClient(app) as test_client:
         yield test_client
@@ -69,6 +97,8 @@ def api_client(fake_event_queue):
 
     database.drop_collection("workflows")
     database.drop_collection("events")
+    database.drop_collection("workflow_runs")
+
     client.close()
 
 
