@@ -303,7 +303,10 @@ async def test_process_next_async_executes_ai_condition_workflow():
         event_id="sentry-condition-e2e",
         source="sentry",
         event_type="issue.created",
-        payload={"message": "PostgreSQL connection timeout", "level": "error"},
+        payload={
+            "message": "PostgreSQL connection timeout",
+            "level": "error",
+        },
         received_at=datetime.now(timezone.utc),
     )
     now = datetime.now(timezone.utc)
@@ -320,17 +323,23 @@ async def test_process_next_async_executes_ai_condition_workflow():
                 id="ai_analysis",
                 type="ai_analysis",
                 config={
-                    "inputs": {"event": {"$ref": "normalize.payload"}},
+                    "inputs": {
+                        "event": {"$ref": "normalize.payload"},
+                    },
                 },
             ),
             WorkflowNode(
                 id="condition",
                 type="condition",
-                config={"operator": "eq"},
-                ),
-                
-            ],
-            
+                config={
+                    "operator": "eq",
+                    "inputs": {
+                        "left": {"$ref": "ai_analysis.severity"},
+                        "right": "high",
+                    },
+                },
+            ),
+        ],
         edges=[
             WorkflowEdge(source="trigger", target="normalize"),
             WorkflowEdge(source="normalize", target="ai_analysis"),
@@ -346,11 +355,6 @@ async def test_process_next_async_executes_ai_condition_workflow():
     executor = AsyncWorkflowNodeExecutor(registry)
     redis = FakeRedis([json.dumps({"event_id": event.event_id})])
     runs = FakeRunRepository()
-
-    workflow.nodes[3].config["inputs"] = {
-        "left": {"$ref": "ai_analysis.severity"},
-        "right": "high",
-    }
 
     worker = EventWorker(
         redis_client=redis,
