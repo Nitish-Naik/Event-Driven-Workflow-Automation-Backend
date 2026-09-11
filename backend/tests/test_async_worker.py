@@ -243,7 +243,12 @@ async def test_process_next_async_executes_sentry_normalize_and_ai_workflow():
             WorkflowNode(
                 id="ai_analysis",
                 type="ai_analysis",
-                config={"prompt": "Classify this Sentry event"},
+                config={
+                    "prompt": "Classify this Sentry event",
+                    "inputs": {
+                        "event": {"$ref": "normalize.payload"},
+                    },
+                },
             ),
         ],
         edges=[
