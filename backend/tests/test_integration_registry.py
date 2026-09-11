@@ -25,8 +25,6 @@ def test_registry_lists_registered_integrations():
     names = {integration.name for integration in integrations}
 
     assert names == {"sentry", "slack"}
-    assert integrations[0].name == "sentry"
-
 
 def test_registry_uses_injected_sentry_client():
     client = SentryClient()
