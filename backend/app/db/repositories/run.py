@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pymongo import ASCENDING
-from pymongo.errors import DuplicateKeyError
 
 from app.db.mongodb import get_database
 from app.schemas.run import RunStatus, WorkflowRun
@@ -23,9 +22,8 @@ class WorkflowRunRepository:
         self.collection = self.database["workflow_runs"]
 
     def create(self, run: WorkflowRun) -> str:
-        document = run.model_dump(mode="json")
-        result = self.collection.insert_one(document)
-        return run.run_id if result.inserted_id is not None else run.run_id
+        self.collection.insert_one(run.model_dump(mode="json"))
+        return run.run_id
 
     def get_by_id(self, run_id: str) -> WorkflowRun | None:
         document = self.collection.find_one({"run_id": run_id})
