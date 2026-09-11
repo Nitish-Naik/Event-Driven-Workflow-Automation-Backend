@@ -376,3 +376,105 @@ async def test_process_next_async_executes_ai_condition_workflow():
         "right": "high",
         "operator": "eq",
     }
+
+
+@pytest.mark.asyncio
+async def test_process_next_async_executes_sentry_ai_condition_slack_workflow():
+    class FakeSlackClient:
+        def __init__(self):
+            self.messages = []
+
+        async def send_message(self, channel: str, text: str):
+            self.messages.append({"channel": channel, "text": text})
+            return {"ok": True, "channel": channel, "ts": "123.456"}
+
+    event = Event(
+        event_id="sentry-slack-e2e",
+        source="sentry",
+        event_type="issue.created",
+        payload={
+            "message": "PostgreSQL connection timeout",
+            "level": "error",
+            "project": "payments-api",
+        },
+        received_at=datetime.now(timezone.utc),
+    )
+    now = datetime.now(timezone.utc)
+    workflow = Workflow(
+        workflow_id="sentry-ai-condition-slack-workflow",
+        name="Sentry AI Condition Slack Workflow",
+        trigger="sentry",
+        version=1,
+        status="active",
+        nodes=[
+            WorkflowNode(id="trigger", type="sentry_trigger"),
+            WorkflowNode(id="normalize", type="normalize_event"),
+            WorkflowNode(
+                id="ai_analysis",
+                type="ai_analysis",
+                config={
+                    "inputs": {
+                        "event": {"$ref": "normalize.payload"},
+                    },
+                },
+            ),
+            WorkflowNode(
+                id="condition",
+                type="condition",
+                config={
+                    "operator": "eq",
+                    "inputs": {
+                        "left": {"$ref": "ai_analysis.severity"},
+                        "right": "high",
+                    },
+                },
+            ),
+            WorkflowNode(
+                id="slack",
+                type="slack",
+                config={
+                    "inputs": {
+                        "channel": "#incidents",
+                        "text": "High severity incident detected",
+                    },
+                },
+            ),
+        ],
+        edges=[
+            WorkflowEdge(source="trigger", target="normalize"),
+            WorkflowEdge(source="normalize", target="ai_analysis"),
+            WorkflowEdge(source="ai_analysis", target="condition"),
+            WorkflowEdge(source="condition", target="slack"),
+        ],
+        created_at=now,
+        updated_at=now,
+    )
+
+    slack_client = FakeSlackClient()
+    integrations = IntegrationRegistry(slack_client=slack_client)
+    executor = AsyncWorkflowNodeExecutor(create_async_registry(integrations))
+    redis = FakeRedis([json.dumps({"event_id": event.event_id})])
+    runs = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository({event.event_id: event}),
+        run_repository=runs,
+        workflow_service=FakeWorkflowService(workflow),
+        async_workflow_executor=executor,
+        retry_queue=FakeRetryQueue(),
+    )
+
+    assert await worker.process_next_async() is True
+
+    run = runs.runs[0]
+    assert run.status == RunStatus.COMPLETED
+    assert runs.outputs[run.run_id]["condition"]["matched"] is True
+    assert runs.outputs[run.run_id]["slack"] == {
+        "channel": "#incidents",
+        "text": "High severity incident detected",
+        "response": {"ok": True, "channel": "#incidents", "ts": "123.456"},
+    }
+    assert slack_client.messages == [
+        {"channel": "#incidents", "text": "High severity incident detected"},
+    ]
