@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pymongo import ASCENDING
+from pymongo.errors import DuplicateKeyError
 
 from app.db.mongodb import get_database
 from app.schemas.run import RunStatus, WorkflowRun
@@ -24,10 +25,17 @@ class WorkflowRunRepository:
     def create(self, run: WorkflowRun) -> str:
         document = run.model_dump(mode="json")
         result = self.collection.insert_one(document)
-        return str(result.inserted_id)
+        return run.run_id if result.inserted_id is not None else run.run_id
 
     def get_by_id(self, run_id: str) -> WorkflowRun | None:
         document = self.collection.find_one({"run_id": run_id})
+        if document is None:
+            return None
+        document.pop("_id", None)
+        return WorkflowRun(**document)
+
+    def get_by_execution_key(self, execution_key: str) -> WorkflowRun | None:
+        document = self.collection.find_one({"execution_key": execution_key})
         if document is None:
             return None
         document.pop("_id", None)
@@ -61,6 +69,12 @@ class WorkflowRunRepository:
             [("run_id", ASCENDING)],
             unique=True,
             name="run_id_unique",
+        )
+        self.collection.create_index(
+            [("execution_key", ASCENDING)],
+            unique=True,
+            partialFilterExpression={"execution_key": {"$type": "string"}},
+            name="execution_key_unique",
         )
 
     def update_retry_metadata(
