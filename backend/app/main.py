@@ -9,7 +9,7 @@ from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
 from app.db.repositories.workflow import WorkflowRepository
 
-from app.routers.workflows import router as workflow_router
+from app.routers.workflow_api import router as workflow_api_router
 from app.routers.webhooks import router as webhook_router
 
 
@@ -25,7 +25,7 @@ app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
 )
-app.include_router(workflow_router)
+app.include_router(workflow_api_router)
 app.include_router(webhook_router)
 
 
