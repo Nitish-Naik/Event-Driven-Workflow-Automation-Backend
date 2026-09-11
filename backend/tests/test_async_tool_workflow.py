@@ -91,8 +91,10 @@ async def test_async_executor_passes_upstream_output_to_tool_node():
     integrations._integrations["sentry"] = InputIntegration()
     executor = AsyncWorkflowNodeExecutor(create_async_registry(integrations))
     context = make_context()
-    context.workflow.nodes[1].config["inputs"] = {"issue": "$trigger"}
+    context.workflow.nodes[1].config["inputs"] = {
+        "issue": {"$ref": "trigger.event_id"}
+    }
 
     result = await executor.execute(context)
 
-    assert result.outputs["tool"]["received"]["event_id"] == "event-tool"
+    assert result.outputs["tool"]["received"] == "event-tool"
