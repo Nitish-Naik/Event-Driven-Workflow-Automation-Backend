@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from app.ai.provider import AIAnalysis, FakeAIProvider
@@ -8,19 +10,22 @@ from app.schemas.workflow import Workflow
 
 
 def make_context() -> ExecutionContext:
+    now = datetime.now(timezone.utc)
     workflow = Workflow(
         workflow_id="wf-1",
         name="AI analysis",
         trigger="sentry.issue",
         nodes=[],
         edges=[],
+        created_at=now,
+        updated_at=now,
     )
     event = Event(
         event_id="event-1",
         source="sentry",
         event_type="issue",
         payload={"message": "PostgreSQL connection timeout", "level": "error"},
-        received_at=None,
+        received_at=now,
     )
     return ExecutionContext(workflow=workflow, event=event)
 
