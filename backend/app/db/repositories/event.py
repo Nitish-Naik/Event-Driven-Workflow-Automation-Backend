@@ -16,9 +16,9 @@ class EventRepository:
     def create(self, event: Event) -> str:
         document = event.model_dump(mode="json")
 
-        result = self.collection.insert_one(document)
+        self.collection.insert_one(document)
 
-        return str(result.inserted_id)
+        return event.event_id
 
     def get_by_id(self, event_id: str) -> Event | None:
         document = self.collection.find_one(
