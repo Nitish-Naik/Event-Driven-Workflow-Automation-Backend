@@ -1,14 +1,20 @@
 from typing import Any
 
+from app.execution.condition import ConditionNode
 from app.execution.contracts import ExecutionContext
 from app.execution.types import NodeHandler
 
 
 SENTRY_TRIGGER = "sentry_trigger"
 NORMALIZE_EVENT = "normalize_event"
+CONDITION = "condition"
 
 
-def sentry_trigger_handler(context: ExecutionContext, config: Any, inputs: dict[str, Any],) -> dict[str, Any]:
+def sentry_trigger_handler(
+    context: ExecutionContext,
+    config: Any,
+    inputs: dict[str, Any],
+) -> dict[str, Any]:
     """Expose the incoming Sentry event as the node output."""
     return {
         "event_id": context.event.event_id,
@@ -18,7 +24,11 @@ def sentry_trigger_handler(context: ExecutionContext, config: Any, inputs: dict[
     }
 
 
-def normalize_event_handler(context: ExecutionContext, config: Any, inputs: dict[str, Any],) -> dict[str, Any]:
+def normalize_event_handler(
+    context: ExecutionContext,
+    config: Any,
+    inputs: dict[str, Any],
+) -> dict[str, Any]:
     """Create a stable event shape for downstream workflow nodes."""
     payload = context.event.payload
     return {
@@ -32,8 +42,21 @@ def normalize_event_handler(context: ExecutionContext, config: Any, inputs: dict
     }
 
 
+_condition_node = ConditionNode()
+
+
+def condition_handler(
+    context: ExecutionContext,
+    config: Any,
+    inputs: dict[str, Any],
+) -> dict[str, Any]:
+    """Evaluate a condition using resolved workflow inputs."""
+    return _condition_node.execute(context, config, inputs)
+
+
 def builtin_handlers() -> dict[str, NodeHandler]:
     return {
         SENTRY_TRIGGER: sentry_trigger_handler,
         NORMALIZE_EVENT: normalize_event_handler,
+        CONDITION: condition_handler,
     }
