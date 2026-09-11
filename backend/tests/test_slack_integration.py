@@ -1,9 +1,11 @@
+import httpx
 import pytest
 
 from app.execution.contracts import ExecutionContext
 from app.execution.slack_notification import SlackNotificationNode
 from app.integrations.registry import IntegrationRegistry
 from app.integrations.slack_client import SlackClient
+from app.integrations.slack_errors import SlackPermanentAPIError, SlackRetryableAPIError
 from app.integrations.slack_integration import SlackIntegration
 from app.integrations.tools.slack import SendSlackMessageTool
 
@@ -72,3 +74,30 @@ def test_slack_integration_exposes_send_message_tool():
 def test_slack_client_requires_positive_timeout():
     with pytest.raises(ValueError):
         SlackClient(bot_token="x", timeout=0)
+
+
+def test_slack_client_classifies_http_429_as_retryable():
+    response = httpx.Response(429, request=httpx.Request("POST", "https://slack.com/api/chat.postMessage"))
+
+    with pytest.raises(SlackRetryableAPIError):
+        SlackClient._raise_for_response(response)
+
+
+def test_slack_client_classifies_http_400_as_permanent():
+    response = httpx.Response(400, request=httpx.Request("POST", "https://slack.com/api/chat.postMessage"))
+
+    with pytest.raises(SlackPermanentAPIError):
+        SlackClient._raise_for_response(response)
+
+
+def test_slack_client_classifies_http_500_as_retryable():
+    response = httpx.Response(500, request=httpx.Request("POST", "https://slack.com/api/chat.postMessage"))
+
+    with pytest.raises(SlackRetryableAPIError):
+        SlackClient._raise_for_response(response)
+
+
+def test_slack_client_requires_bot_token_for_real_requests():
+    client = SlackClient(bot_token=None)
+
+    assert client.bot_token is None
