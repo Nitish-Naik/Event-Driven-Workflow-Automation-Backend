@@ -3,10 +3,13 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.execution.async_executor import AsyncWorkflowNodeExecutor
+from app.execution.async_registry import create_async_registry
 from app.execution.contracts import ExecutionResult
+from app.integrations.registry import IntegrationRegistry
 from app.schemas.event import Event
 from app.schemas.run import RunStatus
-from app.schemas.workflow import Workflow
+from app.schemas.workflow import Workflow, WorkflowEdge, WorkflowNode
 from app.worker.event_worker import EventWorker
 
 
@@ -106,6 +109,8 @@ def make_workflow():
         trigger="sentry",
         version=3,
         status="active",
+        nodes=[],
+        edges=[],
         created_at=now,
         updated_at=now,
     )
@@ -141,3 +146,70 @@ async def test_process_next_async_executes_and_persists_outputs():
         (run.run_id, RunStatus.PROCESSING),
         (run.run_id, RunStatus.COMPLETED),
     ]
+
+
+@pytest.mark.asyncio
+async def test_process_next_async_executes_real_sentry_tool_workflow():
+    class FakeSentryClient:
+        async def get_issue(self, issue_id: str):
+            return {
+                "id": issue_id,
+                "title": "Database connection failed",
+                "status": "unresolved",
+            }
+
+    event = Event(
+        event_id="sentry-event-e2e",
+        source="sentry",
+        event_type="issue.created",
+        payload={"message": "Database connection failed"},
+        received_at=datetime.now(timezone.utc),
+    )
+    now = datetime.now(timezone.utc)
+    workflow = Workflow(
+        workflow_id="sentry-tool-workflow",
+        name="Sentry Tool Workflow",
+        trigger="sentry",
+        version=1,
+        status="active",
+        nodes=[
+            WorkflowNode(id="trigger", type="sentry_trigger"),
+            WorkflowNode(
+                id="get_issue",
+                type="tool",
+                config={
+                    "integration": "sentry",
+                    "tool": "sentry.get_issue",
+                    "inputs": {"issue_id": "123"},
+                },
+            ),
+        ],
+        edges=[WorkflowEdge(source="trigger", target="get_issue")],
+        created_at=now,
+        updated_at=now,
+    )
+
+    integrations = IntegrationRegistry(sentry_client=FakeSentryClient())
+    executor = AsyncWorkflowNodeExecutor(create_async_registry(integrations))
+    redis = FakeRedis([json.dumps({"event_id": event.event_id})])
+    runs = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository({event.event_id: event}),
+        run_repository=runs,
+        workflow_service=FakeWorkflowService(workflow),
+        async_workflow_executor=executor,
+        retry_queue=FakeRetryQueue(),
+    )
+
+    assert await worker.process_next_async() is True
+
+    run = runs.runs[0]
+    assert run.status == RunStatus.COMPLETED
+    assert runs.outputs[run.run_id]["trigger"]["event_id"] == event.event_id
+    assert runs.outputs[run.run_id]["get_issue"] == {
+        "id": "123",
+        "title": "Database connection failed",
+        "status": "unresolved",
+    }
