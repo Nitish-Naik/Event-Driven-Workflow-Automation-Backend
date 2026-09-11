@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.ai.provider import FakeAIProvider
+from app.execution.ai_analysis import AIAnalysisNode
 from app.execution.async_executor import AsyncWorkflowNodeExecutor
 from app.execution.async_registry import create_async_registry
 from app.execution.contracts import ExecutionResult
@@ -212,4 +214,78 @@ async def test_process_next_async_executes_real_sentry_tool_workflow():
         "id": "123",
         "title": "Database connection failed",
         "status": "unresolved",
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_next_async_executes_sentry_normalize_and_ai_workflow():
+    event = Event(
+        event_id="sentry-ai-e2e",
+        source="sentry",
+        event_type="issue.created",
+        payload={
+            "message": "PostgreSQL connection timeout",
+            "level": "error",
+            "project": "payments-api",
+        },
+        received_at=datetime.now(timezone.utc),
+    )
+    now = datetime.now(timezone.utc)
+    workflow = Workflow(
+        workflow_id="sentry-ai-workflow",
+        name="Sentry AI Workflow",
+        trigger="sentry",
+        version=1,
+        status="active",
+        nodes=[
+            WorkflowNode(id="trigger", type="sentry_trigger"),
+            WorkflowNode(id="normalize", type="normalize_event"),
+            WorkflowNode(
+                id="ai_analysis",
+                type="ai_analysis",
+                config={"prompt": "Classify this Sentry event"},
+            ),
+        ],
+        edges=[
+            WorkflowEdge(source="trigger", target="normalize"),
+            WorkflowEdge(source="normalize", target="ai_analysis"),
+        ],
+        created_at=now,
+        updated_at=now,
+    )
+
+    registry = create_async_registry()
+    registry.register("ai_analysis", AIAnalysisNode(FakeAIProvider()).execute)
+    executor = AsyncWorkflowNodeExecutor(registry)
+    redis = FakeRedis([json.dumps({"event_id": event.event_id})])
+    runs = FakeRunRepository()
+
+    worker = EventWorker(
+        redis_client=redis,
+        event_repository=FakeEventRepository({event.event_id: event}),
+        run_repository=runs,
+        workflow_service=FakeWorkflowService(workflow),
+        async_workflow_executor=executor,
+        retry_queue=FakeRetryQueue(),
+    )
+
+    assert await worker.process_next_async() is True
+
+    run = runs.runs[0]
+    assert run.status == RunStatus.COMPLETED
+    assert runs.outputs[run.run_id]["trigger"]["event_id"] == event.event_id
+    assert runs.outputs[run.run_id]["normalize"] == {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "source": event.source,
+        "message": "PostgreSQL connection timeout",
+        "level": "error",
+        "project": "payments-api",
+        "payload": event.payload,
+    }
+    assert runs.outputs[run.run_id]["ai_analysis"] == {
+        "summary": "PostgreSQL connection timeout",
+        "severity": "high",
+        "category": "database",
+        "confidence": 0.95,
     }
