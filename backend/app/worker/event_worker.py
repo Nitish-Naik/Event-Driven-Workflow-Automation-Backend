@@ -2,6 +2,8 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+from pymongo.errors import DuplicateKeyError
+
 from app.db.redis import get_redis
 from app.db.repositories.event import EventRepository
 from app.db.repositories.run import WorkflowRunRepository
@@ -122,6 +124,10 @@ class EventWorker:
         self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
         return True
 
+    @staticmethod
+    def _execution_key(workflow, event) -> str:
+        return f"{event.event_id}:{workflow.workflow_id}:{workflow.version}"
+
     def _build_run(self, workflow, event) -> WorkflowRun:
         now = datetime.now(timezone.utc)
         return WorkflowRun(
@@ -129,10 +135,19 @@ class EventWorker:
             workflow_id=workflow.workflow_id,
             workflow_version=workflow.version,
             event_id=event.event_id,
+            execution_key=self._execution_key(workflow, event),
             status=RunStatus.QUEUED,
             created_at=now,
             updated_at=now,
         )
+
+    def _create_run_idempotently(self, run: WorkflowRun) -> bool:
+        """Create a run once; duplicate execution keys are treated as duplicates."""
+        try:
+            self.run_repository.create(run)
+        except DuplicateKeyError:
+            return False
+        return True
 
     async def process_reserved_async(self, queued_event: QueuedEvent) -> bool:
         event = self.event_repository.get_by_id(queued_event.event_id)
@@ -143,8 +158,14 @@ class EventWorker:
         if workflow is None:
             return True
 
+        execution_key = self._execution_key(workflow, event)
+        if self.run_repository.get_by_execution_key(execution_key) is not None:
+            return True
+
         run = self._build_run(workflow, event)
-        self.run_repository.create(run)
+        if not self._create_run_idempotently(run):
+            return True
+
         return await self._execute_run_async(run, workflow, event)
 
     def process_next(self) -> bool:
@@ -173,7 +194,8 @@ class EventWorker:
             return False
 
         run = self._build_run(workflow, event)
-        self.run_repository.create(run)
+        if not self._create_run_idempotently(run):
+            return True
         return self._execute_run(run, workflow, event)
 
     async def process_next_async(self) -> bool:
@@ -202,7 +224,8 @@ class EventWorker:
             return False
 
         run = self._build_run(workflow, event)
-        self.run_repository.create(run)
+        if not self._create_run_idempotently(run):
+            return True
         return await self._execute_run_async(run, workflow, event)
 
     def process_retry_next(self) -> bool:
