@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 
 from app.execution.builtins import (
+    CONDITION,
     NORMALIZE_EVENT,
     SENTRY_TRIGGER,
     builtin_handlers,
+    condition_handler,
     normalize_event_handler,
     sentry_trigger_handler,
 )
@@ -75,9 +77,27 @@ def test_normalize_event_handles_optional_fields():
     assert result["project"] is None
 
 
+def test_condition_handler_evaluates_resolved_inputs():
+    context = make_context({})
+
+    result = condition_handler(
+        context,
+        {"operator": "eq"},
+        {"left": "high", "right": "high"},
+    )
+
+    assert result == {
+        "matched": True,
+        "left": "high",
+        "right": "high",
+        "operator": "eq",
+    }
+
+
 def test_builtin_handlers_register_expected_node_types():
     handlers = builtin_handlers()
 
-    assert set(handlers) == {SENTRY_TRIGGER, NORMALIZE_EVENT}
+    assert set(handlers) == {SENTRY_TRIGGER, NORMALIZE_EVENT, CONDITION}
     assert handlers[SENTRY_TRIGGER] is sentry_trigger_handler
     assert handlers[NORMALIZE_EVENT] is normalize_event_handler
+    assert handlers[CONDITION] is condition_handler
