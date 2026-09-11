@@ -22,9 +22,8 @@ class WorkflowRunRepository:
         self.collection = self.database["workflow_runs"]
 
     def create(self, run: WorkflowRun) -> str:
-        document = run.model_dump(mode="json")
-        result = self.collection.insert_one(document)
-        return str(result.inserted_id)
+        self.collection.insert_one(run.model_dump(mode="json"))
+        return run.run_id
 
     def get_by_id(self, run_id: str) -> WorkflowRun | None:
         document = self.collection.find_one({"run_id": run_id})
@@ -33,62 +32,48 @@ class WorkflowRunRepository:
         document.pop("_id", None)
         return WorkflowRun(**document)
 
+    def list_all(self, limit: int = 100) -> list[WorkflowRun]:
+        documents = self.collection.find({}, sort=[("created_at", -1)]).limit(limit)
+        return [self._to_model(document) for document in documents]
+
+    def list_failures(self, limit: int = 100) -> list[WorkflowRun]:
+        documents = self.collection.find(
+            {"status": {"$in": [RunStatus.FAILED.value, RunStatus.DEAD_LETTER.value]}},
+            sort=[("updated_at", -1)],
+        ).limit(limit)
+        return [self._to_model(document) for document in documents]
+
+    @staticmethod
+    def _to_model(document) -> WorkflowRun:
+        document.pop("_id", None)
+        return WorkflowRun(**document)
+
     def update_status(self, run_id: str, status: RunStatus) -> bool:
         current = self.get_by_id(run_id)
         if current is None:
             return False
-
         allowed = self.ALLOWED_TRANSITIONS[current.status]
         if status not in allowed:
-            raise ValueError(
-                f"Invalid workflow run transition: "
-                f"{current.status} -> {status}"
-            )
-
+            raise ValueError(f"Invalid workflow run transition: {current.status} -> {status}")
         result = self.collection.update_one(
             {"run_id": run_id, "status": current.status},
-            {
-                "$set": {
-                    "status": status,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
+            {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}},
         )
         return result.modified_count == 1
 
     def create_indexes(self):
-        self.collection.create_index(
-            [("run_id", ASCENDING)],
-            unique=True,
-            name="run_id_unique",
-        )
+        self.collection.create_index([( "run_id", ASCENDING)], unique=True, name="run_id_unique")
 
-    def update_retry_metadata(
-        self,
-        run_id: str,
-        attempt: int,
-        last_error: str,
-    ) -> bool:
+    def update_retry_metadata(self, run_id: str, attempt: int, last_error: str) -> bool:
         result = self.collection.update_one(
             {"run_id": run_id},
-            {
-                "$set": {
-                    "attempt": attempt,
-                    "last_error": last_error,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
+            {"$set": {"attempt": attempt, "last_error": last_error, "updated_at": datetime.now(timezone.utc)}},
         )
         return result.modified_count == 1
 
     def update_outputs(self, run_id: str, outputs: dict[str, Any]) -> bool:
         result = self.collection.update_one(
             {"run_id": run_id},
-            {
-                "$set": {
-                    "outputs": outputs,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
+            {"$set": {"outputs": outputs, "updated_at": datetime.now(timezone.utc)}},
         )
         return result.modified_count == 1
