@@ -228,6 +228,11 @@ class EventWorker:
             return True
         return await self._execute_run_async(run, workflow, event)
 
+    @staticmethod
+    def _retry_matches_run(run, attempt: int) -> bool:
+        """Reject stale retry messages so an old retry cannot execute a run twice."""
+        return run.status == RunStatus.RETRYING and run.attempt == attempt
+
     def process_retry_next(self) -> bool:
         retry = self.retry_queue.pop_due()
         if retry is None:
@@ -248,7 +253,7 @@ class EventWorker:
             return False
 
         run = self.run_repository.get_by_id(run_id)
-        if run is None:
+        if run is None or not self._retry_matches_run(run, attempt):
             return False
 
         workflow = self.workflow_service.get_workflow(run.workflow_id, run.workflow_version)
@@ -277,7 +282,7 @@ class EventWorker:
             return False
 
         run = self.run_repository.get_by_id(run_id)
-        if run is None:
+        if run is None or not self._retry_matches_run(run, attempt):
             return False
 
         workflow = self.workflow_service.get_workflow(run.workflow_id, run.workflow_version)
