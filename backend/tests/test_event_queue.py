@@ -22,6 +22,6 @@ def test_enqueue_event():
     queue_name, value = redis.items[0]
 
     assert queue_name == "sentry:events"
-    assert json.loads(value) == {
-        "event_id": "event-123",
-    }
+    payload = json.loads(value)
+    assert payload["event_id"] == "event-123"
+    assert "enqueued_at" in payload
