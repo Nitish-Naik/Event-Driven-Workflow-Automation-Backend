@@ -22,7 +22,9 @@ def test_registry_lists_registered_integrations():
 
     integrations = registry.list_integrations()
 
-    assert len(integrations) == 1
+    names = {integration.name for integration in integrations}
+
+    assert names == {"sentry", "slack"}
     assert integrations[0].name == "sentry"
 
 
