@@ -55,15 +55,14 @@ def update_workflow(workflow_id: str, version: int, request: UpdateWorkflowReque
     if existing is None:
         raise HTTPException(status_code=404, detail="Workflow not found")
     values = request.model_dump(exclude_unset=True)
-    updated = existing.model_copy(update={**values, "updated_at": datetime.now(timezone.utc)})
+    updated = Workflow(**existing.model_copy(update={**values, "updated_at": datetime.now(timezone.utc)}).model_dump())
     try:
-        updated = Workflow(**updated.model_dump())
         return service.update_workflow(updated)
     except ArchivedWorkflowError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.post("/{workflow_id}/versions/{version}/activate", response_model=WorkflowStatusResponse)
+@router.post("/{workflow_id}/versions/{version}/activate", status_code=status.HTTP_204_NO_CONTENT)
 def activate_workflow(workflow_id: str, version: int, service: WorkflowService = Depends(get_workflow_service)):
     try:
         service.activate_workflow(workflow_id, version)
@@ -71,7 +70,7 @@ def activate_workflow(workflow_id: str, version: int, service: WorkflowService =
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ArchivedWorkflowError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return WorkflowStatusResponse(workflow_id=workflow_id, version=version, status=WorkflowStatus.ACTIVE)
+    return None
 
 
 @router.post("/{workflow_id}/versions/{version}/deactivate", response_model=WorkflowStatusResponse)
@@ -91,6 +90,5 @@ async def test_workflow(workflow_id: str, version: int, request: WorkflowTestReq
     if workflow is None:
         raise HTTPException(status_code=404, detail="Workflow not found")
     event = Event(event_id=f"test-{uuid4()}", source=workflow.trigger, event_type=request.event_type, payload=request.payload, received_at=datetime.now(timezone.utc))
-    executor = AsyncWorkflowNodeExecutor(create_async_registry())
-    result = await executor.execute(ExecutionContext(workflow=workflow, event=event))
+    result = await AsyncWorkflowNodeExecutor(create_async_registry()).execute(ExecutionContext(workflow=workflow, event=event))
     return WorkflowTestResponse(outputs=result.outputs)
