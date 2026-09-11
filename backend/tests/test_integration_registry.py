@@ -22,9 +22,9 @@ def test_registry_lists_registered_integrations():
 
     integrations = registry.list_integrations()
 
-    assert len(integrations) == 1
-    assert integrations[0].name == "sentry"
+    names = {integration.name for integration in integrations}
 
+    assert names == {"sentry", "slack"}
 
 def test_registry_uses_injected_sentry_client():
     client = SentryClient()
