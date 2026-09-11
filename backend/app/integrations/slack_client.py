@@ -38,9 +38,11 @@ class SlackClient:
             return
         status = response.status_code
         if status == 429 or status >= 500:
-            raise SlackRetryableAPIError(
-                f"Slack API returned HTTP {status}", status_code=status
-            )
+            details = f"Slack API returned HTTP {status}"
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                details += f"; retry-after={retry_after}"
+            raise SlackRetryableAPIError(details, status_code=status)
         raise SlackPermanentAPIError(
             f"Slack API returned HTTP {status}", status_code=status
         )
