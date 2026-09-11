@@ -19,6 +19,7 @@ class WorkflowRun(BaseModel):
     workflow_id: str
     workflow_version: int
     event_id: str
+    execution_key: str | None = None
     status: RunStatus
     attempt: int = Field(default=1, ge=1)
     outputs: dict[str, Any] = Field(default_factory=dict)
