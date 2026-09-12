@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -17,6 +18,8 @@ from app.schemas.run import RunStatus, WorkflowRun
 from app.services.workflow import WorkflowService
 from app.queue.retry_queue import RetryQueue
 from app.services.retry import calculate_retry_delay, is_retryable_error
+
+logger = logging.getLogger(__name__)
 
 
 class EventWorker:
@@ -42,6 +45,14 @@ class EventWorker:
         self.retry_queue = retry_queue if retry_queue is not None else RetryQueue(self.redis)
 
     def _execute_run(self, run, workflow, event) -> bool:
+        logger.info(
+            "Workflow execution started event_id=%s workflow_id=%s workflow_version=%s run_id=%s attempt=%s",
+            event.event_id,
+            workflow.workflow_id,
+            workflow.version,
+            run.run_id,
+            run.attempt,
+        )
         self.run_repository.update_status(run.run_id, RunStatus.PROCESSING)
 
         try:
@@ -54,10 +65,24 @@ class EventWorker:
             self.run_repository.update_status(run.run_id, RunStatus.FAILED)
 
             if not is_retryable_error(exc):
+                logger.info(
+                    "Workflow execution failed permanently event_id=%s workflow_id=%s run_id=%s attempt=%s",
+                    event.event_id,
+                    workflow.workflow_id,
+                    run.run_id,
+                    run.attempt,
+                )
                 return True
 
             if run.attempt >= self.MAX_ATTEMPTS:
                 self.run_repository.update_status(run.run_id, RunStatus.DEAD_LETTER)
+                logger.info(
+                    "Workflow execution dead-lettered event_id=%s workflow_id=%s run_id=%s attempt=%s",
+                    event.event_id,
+                    workflow.workflow_id,
+                    run.run_id,
+                    run.attempt,
+                )
                 return True
 
             next_attempt = run.attempt + 1
@@ -74,6 +99,15 @@ class EventWorker:
                 attempt=next_attempt,
                 delay=delay,
             )
+            logger.info(
+                "Workflow execution scheduled for retry event_id=%s workflow_id=%s run_id=%s attempt=%s next_attempt=%s delay=%.2f",
+                event.event_id,
+                workflow.workflow_id,
+                run.run_id,
+                run.attempt,
+                next_attempt,
+                delay,
+            )
             return True
 
         outputs = getattr(result, "outputs", {})
@@ -82,9 +116,25 @@ class EventWorker:
             update_outputs(run.run_id, outputs)
 
         self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
+        logger.info(
+            "Workflow execution completed event_id=%s workflow_id=%s workflow_version=%s run_id=%s attempt=%s",
+            event.event_id,
+            workflow.workflow_id,
+            workflow.version,
+            run.run_id,
+            run.attempt,
+        )
         return True
 
     async def _execute_run_async(self, run, workflow, event) -> bool:
+        logger.info(
+            "Workflow execution started event_id=%s workflow_id=%s workflow_version=%s run_id=%s attempt=%s",
+            event.event_id,
+            workflow.workflow_id,
+            workflow.version,
+            run.run_id,
+            run.attempt,
+        )
         self.run_repository.update_status(run.run_id, RunStatus.PROCESSING)
 
         try:
@@ -94,10 +144,24 @@ class EventWorker:
             self.run_repository.update_status(run.run_id, RunStatus.FAILED)
 
             if not is_retryable_error(exc):
+                logger.info(
+                    "Workflow execution failed permanently event_id=%s workflow_id=%s run_id=%s attempt=%s",
+                    event.event_id,
+                    workflow.workflow_id,
+                    run.run_id,
+                    run.attempt,
+                )
                 return True
 
             if run.attempt >= self.MAX_ATTEMPTS:
                 self.run_repository.update_status(run.run_id, RunStatus.DEAD_LETTER)
+                logger.info(
+                    "Workflow execution dead-lettered event_id=%s workflow_id=%s run_id=%s attempt=%s",
+                    event.event_id,
+                    workflow.workflow_id,
+                    run.run_id,
+                    run.attempt,
+                )
                 return True
 
             next_attempt = run.attempt + 1
@@ -114,6 +178,15 @@ class EventWorker:
                 attempt=next_attempt,
                 delay=delay,
             )
+            logger.info(
+                "Workflow execution scheduled for retry event_id=%s workflow_id=%s run_id=%s attempt=%s next_attempt=%s delay=%.2f",
+                event.event_id,
+                workflow.workflow_id,
+                run.run_id,
+                run.attempt,
+                next_attempt,
+                delay,
+            )
             return True
 
         outputs = getattr(result, "outputs", {})
@@ -122,6 +195,14 @@ class EventWorker:
             update_outputs(run.run_id, outputs)
 
         self.run_repository.update_status(run.run_id, RunStatus.COMPLETED)
+        logger.info(
+            "Workflow execution completed event_id=%s workflow_id=%s workflow_version=%s run_id=%s attempt=%s",
+            event.event_id,
+            workflow.workflow_id,
+            workflow.version,
+            run.run_id,
+            run.attempt,
+        )
         return True
 
     @staticmethod
