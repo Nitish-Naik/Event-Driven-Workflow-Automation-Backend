@@ -4,6 +4,11 @@ import logging
 from app.queue.event_queue import EventQueue
 from app.worker.event_worker import EventWorker
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -26,14 +31,29 @@ class WorkerRunner:
         if queued_event is None:
             return False
 
+        logger.info(
+            "Event reserved event_id=%s message_id=%s",
+            queued_event.event_id,
+            queued_event.message_id,
+        )
+
         try:
             completed = await self.worker.process_reserved_async(queued_event)
         except Exception:
-            logger.exception("Unhandled worker failure for event %s", queued_event.event_id)
+            logger.exception(
+                "Unhandled worker failure event_id=%s",
+                queued_event.event_id,
+            )
             return False
 
         if completed:
-            self.queue.acknowledge(queued_event.message_id)
+            acknowledged = self.queue.acknowledge(queued_event.message_id)
+            logger.info(
+                "Event processed event_id=%s acknowledged=%s",
+                queued_event.event_id,
+                acknowledged,
+            )
+
         return completed
 
     async def run(self) -> None:
@@ -49,3 +69,6 @@ class WorkerRunner:
                 except asyncio.TimeoutError:
                     pass
         logger.info("Worker runner stopped")
+
+if __name__ == "__main__":
+    asyncio.run(WorkerRunner().run())
