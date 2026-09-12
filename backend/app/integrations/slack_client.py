@@ -10,6 +10,8 @@ from app.integrations.slack_errors import (
     SlackRetryableAPIError,
 )
 
+_UNSET = object()
+
 
 class SlackClient:
     """Async HTTP client for the Slack Web API."""
@@ -17,13 +19,15 @@ class SlackClient:
     def __init__(
         self,
         base_url: str | None = None,
-        bot_token: str | None = None,
+        bot_token: str | None | object = _UNSET,
         timeout: float = 10.0,
     ) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         self.base_url = (base_url or settings.slack_base_url).rstrip("/")
-        self.bot_token = bot_token or settings.slack_bot_token
+        self.bot_token = (
+            settings.slack_bot_token if bot_token is _UNSET else bot_token
+        )
         self.timeout = timeout
 
     def _headers(self) -> dict[str, str]:
