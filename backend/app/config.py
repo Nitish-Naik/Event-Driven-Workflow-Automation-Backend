@@ -15,8 +15,12 @@ class Settings(BaseSettings):
     sentry_org_slug: str | None = None
     sentry_webhook_secret: str | None = None
 
+    sentry_hook_id: str | None = None
+
     slack_base_url: str = "https://slack.com/api"
     slack_bot_token: str | None = None
+
+    sentry_webhook_url: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

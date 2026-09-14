@@ -1,4 +1,4 @@
-# VectorShift — Sentry Workflow Automation
+# Event-Driven Workflow Automation Backend
 
 A production-oriented backend for turning Sentry incidents into automated workflow actions.
 
@@ -198,9 +198,16 @@ Configure the Sentry values in `backend/.env`:
 
 ```env
 SENTRY_BASE_URL=https://sentry.io
+
+SENTRY_CLIENT_SECRET=
+SENTRY_DSN=
 SENTRY_ORG_SLUG=
 SENTRY_AUTH_TOKEN=
 SENTRY_WEBHOOK_SECRET=
+SLACK_BOT_TOKEN=
+SLACK_CHANNEL_ID=
+SENTRY_HOOK_ID=
+SENTRY_WEBHOOK_URL=
 ```
 
 Configure the Slack values if using Slack notifications:
@@ -310,20 +317,12 @@ VectorShift/
 - **Worker:** keeps webhook processing asynchronous and decoupled from workflow execution.
 - **Workflow versioning:** makes executions reproducible and auditable.
 - **Provider abstractions:** Sentry, Slack, and AI integrations are isolated behind interfaces/registries so external dependencies can be tested independently.
-- **Fake AI provider:** deterministic tests can run without requiring a paid AI API.
 
 ## Development notes
 
 The current implementation is intentionally a focused backend system rather than a distributed Kafka/Kubernetes deployment. The Redis queue uses a reliable-list pattern with a processing list; it is not intended to claim full broker-level visibility-timeout semantics.
 
 The condition node evaluates its configured predicate. The current executor does not use a false condition as a graph-level branch/gate, so the demo workflow uses a true condition on its successful path.
-
-## Security
-
-- Do not commit `.env` files or credentials.
-- Keep Sentry webhook secrets private.
-- Use HTTPS for publicly reachable webhook endpoints.
-- Use least-privilege credentials for external integrations.
 
 ## Verification
 

@@ -27,6 +27,11 @@ class WorkerRunner:
         self._stop_event.set()
 
     async def run_once(self) -> bool:
+        retry_processed = await self.worker.process_retry_next_async()
+        if retry_processed:
+            logger.info("Due workflow retry processed")
+            return True
+
         queued_event = self.queue.reserve()
         if queued_event is None:
             return False

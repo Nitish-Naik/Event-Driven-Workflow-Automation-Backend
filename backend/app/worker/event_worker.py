@@ -63,9 +63,14 @@ class EventWorker:
                 result = self.workflow_executor.execute(workflow, event)
         except Exception as exc:
             self.run_repository.update_status(run.run_id, RunStatus.FAILED)
+            self.run_repository.update_retry_metadata(
+                run_id=run.run_id,
+                attempt=run.attempt,
+                last_error=str(exc),
+            )
 
             if not is_retryable_error(exc):
-                logger.info(
+                logger.exception(
                     "Workflow execution failed permanently event_id=%s workflow_id=%s run_id=%s attempt=%s",
                     event.event_id,
                     workflow.workflow_id,
@@ -142,9 +147,14 @@ class EventWorker:
             result = await self.async_workflow_executor.execute(context)
         except Exception as exc:
             self.run_repository.update_status(run.run_id, RunStatus.FAILED)
+            self.run_repository.update_retry_metadata(
+                run_id=run.run_id,
+                attempt=run.attempt,
+                last_error=str(exc),
+            )
 
             if not is_retryable_error(exc):
-                logger.info(
+                logger.exception(
                     "Workflow execution failed permanently event_id=%s workflow_id=%s run_id=%s attempt=%s",
                     event.event_id,
                     workflow.workflow_id,

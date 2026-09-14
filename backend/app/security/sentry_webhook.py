@@ -5,6 +5,7 @@ import hmac
 
 
 SENTRY_SIGNATURE_HEADER = "x-servicehook-signature"
+SENTRY_HOOK_SIGNATURE_HEADER = "sentry-hook-signature"
 
 
 def verify_sentry_signature(

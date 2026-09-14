@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.config import settings
 from app.integrations.sentry import normalize_sentry_event
 from app.security.sentry_webhook import (
+    SENTRY_HOOK_SIGNATURE_HEADER,
     SENTRY_SIGNATURE_HEADER,
     verify_sentry_signature,
 )
@@ -37,7 +38,9 @@ async def receive_sentry_event(
     raw_body = await request.body()
 
     if settings.sentry_webhook_secret:
-        signature = request.headers.get(SENTRY_SIGNATURE_HEADER)
+        signature = request.headers.get(SENTRY_HOOK_SIGNATURE_HEADER) or request.headers.get(
+            SENTRY_SIGNATURE_HEADER
+        )
         if not verify_sentry_signature(
             settings.sentry_webhook_secret,
             raw_body,
