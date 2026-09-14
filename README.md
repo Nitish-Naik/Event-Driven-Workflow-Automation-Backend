@@ -257,6 +257,12 @@ FAILED → RETRYING → PROCESSING
              retry limit → DEAD_LETTER
 ```
 
+## Node abstraction
+
+The workflow engine is built around reusable nodes. The executor handles workflow traversal and execution coordination, while individual nodes and integrations encapsulate their own behavior.
+
+This keeps the core workflow engine independent of specific external providers such as Slack and makes new workflow capabilities easier to add and test.
+
 ## Workflow model
 
 A workflow is versioned and consists of nodes and directed edges. Nodes can represent triggers, transformations, AI analysis, conditions, and integrations.
