@@ -138,7 +138,7 @@ From `backend/`:
 pytest -q
 ```
 
-The current repository state has **254 passing tests**.
+The current repository state has **255 passing tests**.
 
 ## Test a workflow through the API
 
@@ -242,6 +242,8 @@ Transient failures are retryable, including:
 - request timeouts
 
 Retries use exponential backoff with jitter. Permanent client errors are not retried.
+
+The retry behavior is covered by an integration-level test that injects a failing Slack dependency, verifies the real worker retry path, and then verifies successful completion on the second attempt.
 
 ### Dead-letter handling
 
