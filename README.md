@@ -33,8 +33,8 @@ MongoDB is the durable source of truth. Redis is used for the transient event qu
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Nitish-Naik/VectorShift.git
-cd VectorShift/backend
+git clone https://github.com/Nitish-Naik/Event-Driven Workflow Automation Backend.git
+cd Event-Driven Workflow Automation Backend/backend
 ```
 
 ### 2. Create the environment file
