@@ -286,7 +286,7 @@ Each workflow run records the workflow version that actually executed.
 ## Project structure
 
 ```text
-VectorShift/
+Event-Driven Workflow Automation Backend/
 ├── backend/
 │   ├── app/
 │   │   ├── db/              # MongoDB, Redis, repositories
